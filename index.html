@@ -1279,6 +1279,7 @@ const CACHE_KEY   = 'diagnostech_cache';
 // ── State ──
 let currentStore = 'hd';
 let currentTrade = 'plumbing';
+let PRODUCTS     = null; // loaded from products.json
 let userLocation  = null;
 let compareMode   = false;
 let compareData   = { hd: null, lw: null };
@@ -1365,12 +1366,64 @@ const TRADE_ICONS = {
 };
 
 // ── Init ──
-function init() {
+async function init() {
   updateTemplates();
   refreshHistoryTrigger();
   if (!navigator.onLine) showOfflineBanner(true);
   window.addEventListener('online',  () => showOfflineBanner(false));
   window.addEventListener('offline', () => showOfflineBanner(true));
+  await loadProducts();
+}
+
+// ── Product database ──
+async function loadProducts() {
+  try {
+    const res = await fetch('products.json');
+    PRODUCTS = await res.json();
+    console.log('[DiagnostechAI] Product DB loaded —', countProducts(), 'items');
+  } catch {
+    console.warn('[DiagnostechAI] products.json not found — AI will estimate products');
+  }
+}
+
+function countProducts() {
+  if (!PRODUCTS) return 0;
+  return Object.values(PRODUCTS)
+    .filter(v => Array.isArray(v))
+    .reduce((sum, arr) => sum + arr.length, 0);
+}
+
+function searchProducts(query, trade, limit = 30) {
+  if (!PRODUCTS) return [];
+  const tradeItems   = Array.isArray(PRODUCTS[trade])   ? PRODUCTS[trade]   : [];
+  const generalItems = Array.isArray(PRODUCTS['general']) ? PRODUCTS['general'] : [];
+  const pool = [...tradeItems, ...generalItems];
+
+  const stopWords = new Set(['the','and','for','with','from','that','this','have','will','need','a','an','in','on','at','to','of','or','is']);
+  const keywords = query.toLowerCase()
+    .split(/[\s,./\\-]+/)
+    .filter(w => w.length > 2 && !stopWords.has(w));
+
+  if (keywords.length === 0) return pool.slice(0, limit);
+
+  const scored = pool.map(p => {
+    const haystack = `${p.name} ${p.spec} ${(p.tags || []).join(' ')}`.toLowerCase();
+    const score = keywords.reduce((s, kw) => s + (haystack.includes(kw) ? 1 : 0), 0);
+    return { ...p, score };
+  });
+
+  return scored
+    .filter(p => p.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+}
+
+function formatProductsForPrompt(products) {
+  if (!products.length) return '';
+  const lines = products.map(p =>
+    `- ${p.name} | ${p.spec} | Aisle ${p.aisle} Bay ${p.bay} | ~$${p.price.toFixed(2)}`
+  );
+  return `\nVERIFIED STORE INVENTORY (use these first — real aisles and prices):\n${lines.join('\n')}\n`;
 }
 
 // ── Offline ──
@@ -1544,7 +1597,7 @@ async function requestLocation() {
 }
 
 // ── Build system prompt ──
-function buildSystemPrompt(storeKey) {
+function buildSystemPrompt(storeKey, inventoryContext = '') {
   const store  = STORES[storeKey || currentStore];
   const locStr = userLocation
     ? `The technician is in ${userLocation.city}${userLocation.region ? ', ' + userLocation.region : ''}.`
@@ -1554,13 +1607,13 @@ function buildSystemPrompt(storeKey) {
 ${locStr}
 
 The technician's trade category: ${currentTrade}.
-
+${inventoryContext}
 Your ONLY job is to produce a complete, precise material list so the technician can complete this job in ONE trip with ZERO return visits.
 
 Rules:
 1. Include EVERY item needed — fasteners, fittings, tape, primer, accessories. Never leave anything out.
 2. Be specific on sizes, grades, and specs. Wrong spec = wasted trip.
-3. Use realistic ${store.name} product names and aisle numbers.
+3. ${inventoryContext ? 'Prioritize items from the VERIFIED STORE INVENTORY above — use the exact aisle, bay, and price shown. If an item is not in the inventory, add it anyway and mark the name with (*) to flag it as estimated.' : `Use realistic ${store.name} product names and aisle numbers.`}
 4. Flag any permit, code, or safety concern in NOTES.
 5. Suggest a 10–15% overage on consumables (screws, fasteners, tape, caulk).
 6. List the tools required in the TOOLS section.
@@ -1801,7 +1854,9 @@ function switchCompareTab(storeKey) {
 
 // ── Fetch raw text from API ──
 async function fetchFromAPI(prompt, storeKey) {
-  const system = buildSystemPrompt(storeKey);
+  const matched  = searchProducts(prompt, currentTrade);
+  const inventory = formatProductsForPrompt(matched);
+  const system   = buildSystemPrompt(storeKey, inventory);
 
   if (USE_LOCAL) {
     // ── Ollama (OpenAI-compatible) ──
