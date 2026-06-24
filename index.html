@@ -1609,8 +1609,14 @@ async function init() {
         showUserBadge(user);
         refreshHistoryTrigger();
         showApp();
+      } else {
+        // No signed-in user — show auth screen if gate was already passed
+        const gatePassed = sessionStorage.getItem(ACCESS_SESSION) === 'granted';
+        if (gatePassed) {
+          document.getElementById('authScreen').style.display = 'flex';
+        }
+        // If gate not passed, gate screen is still visible — do nothing
       }
-      // if no user and gate already passed, auth screen stays visible
     });
   } else {
     // Firebase not configured — skip auth, go straight to app
