@@ -1531,16 +1531,16 @@ let authMode = 'signin'; // 'signin' | 'signup'
 
 // ─────────────────────────────────────────────
 // MODE — flip USE_LOCAL to switch backends
-//   false → Claude API  (use for Netlify / production)
-//   true  → Ollama      (free local testing, no tokens)
+//   false → Netlify proxy  (production — API key stays on server)
+//   true  → Ollama         (free local testing, no tokens)
 // ─────────────────────────────────────────────
 const USE_LOCAL   = true;                        // ← toggle here
 const LOCAL_MODEL = 'qwen3.6';                   // ollama model name
 const LOCAL_URL   = 'http://localhost:11434/v1/chat/completions';
 
-// Claude (only used when USE_LOCAL = false)
-const API_KEY    = 'REDACTED-ROTATE-THIS-KEY';
-const API_URL    = 'https://api.anthropic.com/v1/messages';
+// Production: calls /api/ai which routes to netlify/functions/ai-proxy.js
+// The real API key lives in Netlify environment variables — never in this file.
+const PROXY_URL  = '/api/ai';
 const MODEL      = 'claude-sonnet-4-6';
 const MAX_TOKENS = 1600;
 
@@ -2270,15 +2270,10 @@ async function fetchFromAPI(prompt, storeKey) {
     return data.choices?.[0]?.message?.content || '';
 
   } else {
-    // ── Claude API ──
-    const response = await fetch(API_URL, {
+    // ── Netlify proxy → Claude API (API key never leaves the server) ──
+    const response = await fetch(PROXY_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type':  'application/json',
-        'x-api-key':     API_KEY,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model:      MODEL,
         max_tokens: MAX_TOKENS,
@@ -2287,6 +2282,7 @@ async function fetchFromAPI(prompt, storeKey) {
       }),
     });
     const data = await response.json();
+    if (response.status === 429) throw new Error(data.error || 'Rate limit reached — try again later.');
     if (!response.ok || data.error) throw new Error(data.error?.message || `API error ${response.status}`);
     return data.content?.map(b => b.text || '').join('') || '';
   }
