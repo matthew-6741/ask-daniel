@@ -1519,12 +1519,13 @@ let currentUser = null;
 let authMode = 'signin'; // 'signin' | 'signup'
 
 (function initFirebase() {
+  if (FIREBASE_CONFIG.apiKey === 'YOUR_API_KEY') return; // not configured yet
   try {
     firebase.initializeApp(FIREBASE_CONFIG);
     fbAuth = firebase.auth();
     fbDb   = firebase.firestore();
   } catch (e) {
-    console.warn('Firebase not configured — auth disabled:', e.message);
+    console.warn('Firebase init failed:', e.message);
   }
 })();
 
