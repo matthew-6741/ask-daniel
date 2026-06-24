@@ -1611,17 +1611,14 @@ async function init() {
         refreshHistoryTrigger();
         showApp();
       } else {
-        // No signed-in user — show auth screen if gate was already passed
         const gatePassed = sessionStorage.getItem(ACCESS_SESSION) === 'granted';
-        if (gatePassed) {
-          document.getElementById('authScreen').style.display = 'flex';
-        }
-        // If gate not passed, gate screen is still visible — do nothing
+        if (gatePassed) document.getElementById('authScreen').style.display = 'flex';
       }
     });
   } else {
-    // Firebase not configured — skip auth, go straight to app
-    showApp();
+    // Firebase not configured — still show auth screen so user can continue as guest
+    const gatePassed = sessionStorage.getItem(ACCESS_SESSION) === 'granted';
+    if (gatePassed) document.getElementById('authScreen').style.display = 'flex';
   }
 }
 
@@ -1688,7 +1685,10 @@ document.addEventListener('click', e => {
 
 // ── Auth actions ──
 async function authGoogle() {
-  if (!fbAuth) return;
+  if (!fbAuth) {
+    setAuthError('Account login not set up yet — use Continue as Guest.');
+    return;
+  }
   setAuthError('');
   try {
     const provider = new firebase.auth.GoogleAuthProvider();
@@ -1699,7 +1699,10 @@ async function authGoogle() {
 }
 
 async function authSubmit() {
-  if (!fbAuth) return;
+  if (!fbAuth) {
+    setAuthError('Account login not set up yet — use Continue as Guest.');
+    return;
+  }
   setAuthError('');
   const email = document.getElementById('authEmail').value.trim();
   const pass  = document.getElementById('authPass').value;
@@ -2573,9 +2576,9 @@ function checkCode() {
     sessionStorage.setItem(ACCESS_SESSION, 'granted');
     document.getElementById('accessGate').style.display = 'none';
     document.body.style.overflow = '';
-    // If Firebase not configured or user already logged in, go straight to app
-    if (!fbAuth || (fbAuth && fbAuth.currentUser)) {
-      showApp();
+    // Always show auth screen — guest path works even without Firebase
+    if (fbAuth && fbAuth.currentUser) {
+      showApp(); // already signed in
     } else {
       document.getElementById('authScreen').style.display = 'flex';
     }
