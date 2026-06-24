@@ -143,10 +143,187 @@
 }
 </script>
 
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
 <style>
 /* ── Reset ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── Auth screen ── */
+#authScreen {
+  position: fixed;
+  inset: 0;
+  background: #f4f3ef;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9998;
+  padding: 24px;
+  overflow-y: auto;
+}
+.auth-card {
+  background: #fff;
+  border: 1px solid #e4e3dc;
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.10);
+  padding: 32px;
+  width: 100%;
+  max-width: 400px;
+}
+.auth-logo-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.auth-logo-mark {
+  width: 40px; height: 40px;
+  background: #E85B2A;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 20px; color: white; letter-spacing: 1px;
+}
+.auth-logo-text { font-family: 'Bebas Neue', sans-serif; font-size: 20px; letter-spacing: 1.5px; }
+.auth-headline { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+.auth-sub { font-size: 12px; color: #7a7a72; margin-bottom: 20px; line-height: 1.5; }
+.auth-google-btn {
+  width: 100%;
+  padding: 11px;
+  border: 1.5px solid #e4e3dc;
+  border-radius: 10px;
+  background: #fff;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px; font-weight: 600;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  transition: border-color .15s, box-shadow .15s;
+  margin-bottom: 16px;
+}
+.auth-google-btn:hover { border-color: #4285f4; box-shadow: 0 0 0 2px #e8f0fe; }
+.auth-google-icon { width: 18px; height: 18px; flex-shrink: 0; }
+.auth-divider {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 11px; color: #b0b0a8; margin-bottom: 16px;
+}
+.auth-divider::before, .auth-divider::after {
+  content: ''; flex: 1; height: 1px; background: #e4e3dc;
+}
+.auth-tabs {
+  display: flex;
+  border: 1.5px solid #e4e3dc;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+.auth-tab {
+  flex: 1; padding: 9px;
+  border: none; background: #f4f3ef;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px; font-weight: 600; color: #7a7a72;
+  cursor: pointer; transition: all .15s;
+}
+.auth-tab.active { background: #fff; color: #1a1a18; }
+.auth-fields { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+.auth-field { display: flex; flex-direction: column; gap: 4px; }
+.auth-field label { font-size: 11px; font-weight: 600; color: #7a7a72; text-transform: uppercase; letter-spacing: .4px; }
+.auth-field input,
+.auth-field select {
+  padding: 10px 12px;
+  border: 1.5px solid #e4e3dc;
+  border-radius: 8px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  background: #fff; color: #1a1a18;
+  outline: none;
+  transition: border-color .15s;
+}
+.auth-field input:focus,
+.auth-field select:focus { border-color: #E85B2A; }
+.auth-submit-btn {
+  width: 100%; padding: 12px;
+  background: #E85B2A; color: white;
+  border: none; border-radius: 10px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px; font-weight: 600;
+  cursor: pointer; transition: opacity .15s;
+  margin-bottom: 10px;
+}
+.auth-submit-btn:hover { opacity: .88; }
+.auth-error {
+  font-size: 12px; color: #c0392b;
+  text-align: center; min-height: 16px;
+  margin-bottom: 10px;
+}
+.auth-guest-btn {
+  width: 100%; padding: 10px;
+  border: 1.5px dashed #e4e3dc;
+  border-radius: 10px;
+  background: none;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px; color: #7a7a72;
+  cursor: pointer; transition: all .15s;
+}
+.auth-guest-btn:hover { border-color: #7a7a72; color: #1a1a18; }
+.auth-guest-note { font-size: 10px; color: #b0b0a8; text-align: center; margin-top: 6px; }
+
+/* User badge in header */
+.user-badge {
+  display: flex; align-items: center; gap: 7px;
+  padding: 5px 10px;
+  border: 1px solid #e4e3dc;
+  border-radius: 20px;
+  background: #fff;
+  font-size: 12px; font-weight: 500;
+  cursor: pointer;
+  position: relative;
+  transition: border-color .15s;
+}
+.user-badge:hover { border-color: var(--accent); }
+.user-avatar {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700;
+  flex-shrink: 0;
+}
+.user-badge.guest .user-avatar { background: #b0b0a8; }
+.user-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: #fff;
+  border: 1px solid #e4e3dc;
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.12);
+  min-width: 180px;
+  overflow: hidden;
+  z-index: 100;
+  display: none;
+}
+.user-dropdown.open { display: block; }
+.user-dropdown-info {
+  padding: 12px 14px;
+  border-bottom: 1px solid #e4e3dc;
+  font-size: 12px;
+}
+.user-dropdown-name { font-weight: 600; color: #1a1a18; }
+.user-dropdown-type { font-size: 11px; color: #7a7a72; margin-top: 1px; }
+.user-dropdown-signout {
+  display: block; width: 100%; padding: 11px 14px;
+  background: none; border: none;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px; color: #c0392b;
+  text-align: left; cursor: pointer;
+  transition: background .1s;
+}
+.user-dropdown-signout:hover { background: #fdecea; }
 
 /* ── Access gate ── */
 #accessGate {
@@ -1009,7 +1186,64 @@ textarea::placeholder { color: #b0b0a8; }
   </div>
 </div>
 
-<div class="shell">
+<!-- ── Auth screen ── -->
+<div id="authScreen" style="display:none">
+  <div class="auth-card">
+    <div class="auth-logo-row">
+      <div class="auth-logo-mark">DA</div>
+      <div class="auth-logo-text">DiagnostechAI</div>
+    </div>
+    <div class="auth-headline">Welcome back</div>
+    <div class="auth-sub">Sign in to save your job history and material lists across devices. Corporations get team history and reporting.</div>
+
+    <!-- Google -->
+    <button class="auth-google-btn" onclick="authGoogle()">
+      <svg class="auth-google-icon" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 7.9 2.9l5.7-5.7C34.1 6.5 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 16 19 13 24 13c3.1 0 5.8 1.1 7.9 2.9l5.7-5.7C34.1 6.5 29.3 4 24 4 16.3 4 9.6 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.3 35.3 26.8 36 24 36c-5.3 0-9.7-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.3 4.1-4.2 5.4l6.2 5.2C37 36.9 44 31 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>
+      Continue with Google
+    </button>
+
+    <div class="auth-divider">or</div>
+
+    <!-- Tabs -->
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="tabSignIn" onclick="switchAuthTab('signin')">Sign In</button>
+      <button class="auth-tab" id="tabSignUp" onclick="switchAuthTab('signup')">Create Account</button>
+    </div>
+
+    <!-- Fields -->
+    <div class="auth-fields">
+      <div class="auth-field" id="fieldName" style="display:none">
+        <label>Full Name</label>
+        <input type="text" id="authName" placeholder="Matthew Sanchez" autocomplete="name">
+      </div>
+      <div class="auth-field" id="fieldType" style="display:none">
+        <label>Account Type</label>
+        <select id="authType">
+          <option value="consumer">Consumer</option>
+          <option value="contractor">Contractor / Tradesperson</option>
+          <option value="corporation">Corporation / Business</option>
+        </select>
+      </div>
+      <div class="auth-field">
+        <label>Email</label>
+        <input type="email" id="authEmail" placeholder="you@example.com" autocomplete="email">
+      </div>
+      <div class="auth-field">
+        <label>Password</label>
+        <input type="password" id="authPass" placeholder="••••••••" autocomplete="current-password"
+               onkeydown="if(event.key==='Enter') authSubmit()">
+      </div>
+    </div>
+
+    <div class="auth-error" id="authError"></div>
+    <button class="auth-submit-btn" id="authSubmitBtn" onclick="authSubmit()">Sign In</button>
+
+    <button class="auth-guest-btn" onclick="authGuest()">Continue as Guest</button>
+    <div class="auth-guest-note">Guest history is saved locally on this device only.</div>
+  </div>
+</div>
+
+<div class="shell" style="display:none">
 
   <!-- Offline banner -->
   <div class="offline-banner" id="offlineBanner" style="display:none">
@@ -1033,6 +1267,17 @@ textarea::placeholder { color: #b0b0a8; }
         <span class="loc-dot"></span>
         <span id="locLabel">Detect location</span>
       </button>
+      <div class="user-badge" id="userBadge" onclick="toggleUserDropdown()" style="display:none">
+        <div class="user-avatar" id="userAvatar">?</div>
+        <span id="userLabel">Guest</span>
+        <div class="user-dropdown" id="userDropdown">
+          <div class="user-dropdown-info">
+            <div class="user-dropdown-name" id="dropdownName">Guest</div>
+            <div class="user-dropdown-type" id="dropdownType">Anonymous session</div>
+          </div>
+          <button class="user-dropdown-signout" onclick="signOutUser()">Sign out</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1091,15 +1336,9 @@ textarea::placeholder { color: #b0b0a8; }
     </div>
     <div class="card-body">
       <div class="trades" id="trades">
-        <button class="trade-chip active" data-trade="plumbing"   onclick="setTrade(this)">🔧 Plumbing</button>
-        <button class="trade-chip"        data-trade="electrical" onclick="setTrade(this)">⚡ Electrical</button>
-        <button class="trade-chip"        data-trade="framing"    onclick="setTrade(this)">🪵 Framing / Drywall</button>
-        <button class="trade-chip"        data-trade="hvac"       onclick="setTrade(this)">❄️ HVAC</button>
-        <button class="trade-chip"        data-trade="concrete"   onclick="setTrade(this)">🧱 Concrete / Masonry</button>
-        <button class="trade-chip"        data-trade="roofing"    onclick="setTrade(this)">🏠 Roofing</button>
-        <button class="trade-chip"        data-trade="paint"      onclick="setTrade(this)">🎨 Paint / Finishing</button>
-        <button class="trade-chip"        data-trade="auto"       onclick="setTrade(this)">🚗 Auto / Mechanical</button>
-        <button class="trade-chip"        data-trade="general"    onclick="setTrade(this)">🔩 General</button>
+        <button class="trade-chip active" data-trade="plumbing"  onclick="setTrade(this)">🔧 Plumbing</button>
+        <button class="trade-chip"        data-trade="hvac"      onclick="setTrade(this)">❄️ Basic HVAC</button>
+        <button class="trade-chip"        data-trade="carpentry" onclick="setTrade(this)">🪵 Carpentry</button>
       </div>
     </div>
 
@@ -1259,6 +1498,37 @@ textarea::placeholder { color: #b0b0a8; }
 
 <script>
 // ─────────────────────────────────────────────
+// FIREBASE CONFIG
+// 1. Go to console.firebase.google.com
+// 2. Create project → Add web app → copy config here
+// 3. Enable Authentication: Email/Password + Google
+// 4. Enable Firestore Database (start in test mode)
+// ─────────────────────────────────────────────
+const FIREBASE_CONFIG = {
+  apiKey:            'YOUR_API_KEY',
+  authDomain:        'YOUR_PROJECT.firebaseapp.com',
+  projectId:         'YOUR_PROJECT_ID',
+  storageBucket:     'YOUR_PROJECT.appspot.com',
+  messagingSenderId: 'YOUR_SENDER_ID',
+  appId:             'YOUR_APP_ID',
+};
+
+let fbAuth = null;
+let fbDb   = null;
+let currentUser = null;
+let authMode = 'signin'; // 'signin' | 'signup'
+
+(function initFirebase() {
+  try {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    fbAuth = firebase.auth();
+    fbDb   = firebase.firestore();
+  } catch (e) {
+    console.warn('Firebase not configured — auth disabled:', e.message);
+  }
+})();
+
+// ─────────────────────────────────────────────
 // MODE — flip USE_LOCAL to switch backends
 //   false → Claude API  (use for Netlify / production)
 //   true  → Ollama      (free local testing, no tokens)
@@ -1302,77 +1572,186 @@ const TEMPLATES = {
     'Replace 40-gallon gas water heater',
     'Install dishwasher supply and drain lines',
   ],
-  electrical: [
-    'Install GFCI outlet in a bathroom',
-    'Replace circuit breaker in a 200A panel',
-    'Add ceiling light fixture from existing switch',
-    'Wire 240V dryer outlet',
-    'Replace 3-way hallway switch',
+  hvac: [
+    'Replace AC capacitor on central air unit',
+    'Install programmable thermostat',
+    'Service gas furnace, forced air system',
+    'Replace 6-inch flex duct run, 20 feet',
+    'Add return air vent to existing duct',
   ],
-  framing: [
+  carpentry: [
     'Frame non-load-bearing interior wall, 8ft ceiling',
     'Hang and tape drywall in a 12×12 bedroom',
     'Patch 12×12 inch drywall hole',
-    'Install pocket door rough-in frame',
-    'Add 2×4 blocking for TV wall mount',
-  ],
-  hvac: [
-    'Replace AC capacitor',
-    'Install programmable thermostat',
-    'Service gas furnace, forced air',
-    'Replace 6-inch flex duct, 20-foot run',
-    'Add return air vent to existing duct',
-  ],
-  concrete: [
-    'Pour 10×10 concrete pad for AC unit, 4" slab',
-    'Repair cracked driveway section, 2×4 ft',
-    'Set 6 fence posts in concrete, 4×4 posts',
-    'Resurface spalling garage floor',
-    'Fill basement wall hairline crack',
-  ],
-  roofing: [
-    'Replace 10 damaged 3-tab asphalt shingles',
-    'Flash and seal chimney on shingle roof',
-    'Install 20-foot roof ridge vent',
-    'Patch flat TPO membrane, 3×3 ft',
-    'Replace 40-foot 5-inch K-style gutters',
-  ],
-  paint: [
-    'Paint 12×15 bedroom, walls and ceiling',
-    'Paint exterior wood trim, 100 linear feet',
-    'Prime and paint new drywall room',
-    'Apply deck stain to 200 sqft wood deck',
-    'Touch up interior walls after patching',
-  ],
-  auto: [
-    'Replace front brake pads and rotors, 2018 Honda Civic',
-    'Full synthetic oil and filter change, V6',
-    'Replace serpentine belt',
-    'Install new spark plugs, V8 engine',
-    'Replace dead car battery',
-  ],
-  general: [
-    'Install TV wall mount on drywall over studs',
-    'Hang 20 cabinet doors with new hardware',
-    'Install pre-hung exterior door',
-    'Fix squeaky hardwood floor in 3 spots',
-    'Install subway tile kitchen backsplash, 20 sqft',
+    'Install pre-hung interior door',
+    'Build 10×12 pressure-treated deck, ground level',
   ],
 };
 
 const TRADE_ICONS = {
-  plumbing:'🔧', electrical:'⚡', framing:'🪵', hvac:'❄️',
-  concrete:'🧱', roofing:'🏠', paint:'🎨', auto:'🚗', general:'🔩',
+  plumbing: '🔧',
+  hvac:     '❄️',
+  carpentry:'🪵',
 };
 
 // ── Init ──
 async function init() {
   updateTemplates();
-  refreshHistoryTrigger();
   if (!navigator.onLine) showOfflineBanner(true);
   window.addEventListener('online',  () => showOfflineBanner(false));
   window.addEventListener('offline', () => showOfflineBanner(true));
   await loadProducts();
+
+  if (fbAuth) {
+    fbAuth.onAuthStateChanged(user => {
+      if (user) {
+        currentUser = user;
+        showUserBadge(user);
+        refreshHistoryTrigger();
+        showApp();
+      }
+      // if no user and gate already passed, auth screen stays visible
+    });
+  } else {
+    // Firebase not configured — skip auth, go straight to app
+    showApp();
+  }
+}
+
+function showApp() {
+  document.getElementById('authScreen').style.display = 'none';
+  document.querySelector('.shell').style.display      = 'flex';
+}
+
+// ── Auth UI helpers ──
+function switchAuthTab(mode) {
+  authMode = mode;
+  document.getElementById('tabSignIn').classList.toggle('active', mode === 'signin');
+  document.getElementById('tabSignUp').classList.toggle('active', mode === 'signup');
+  document.getElementById('authSubmitBtn').textContent = mode === 'signup' ? 'Create Account' : 'Sign In';
+  document.getElementById('fieldName').style.display = mode === 'signup' ? 'flex' : 'none';
+  document.getElementById('fieldType').style.display = mode === 'signup' ? 'flex' : 'none';
+  document.getElementById('authError').textContent = '';
+}
+
+function setAuthError(msg) {
+  document.getElementById('authError').textContent = msg;
+}
+
+function showUserBadge(user) {
+  const badge   = document.getElementById('userBadge');
+  const avatar  = document.getElementById('userAvatar');
+  const label   = document.getElementById('userLabel');
+  const dName   = document.getElementById('dropdownName');
+  const dType   = document.getElementById('dropdownType');
+
+  badge.style.display = 'flex';
+
+  if (user.isAnonymous) {
+    badge.classList.add('guest');
+    avatar.textContent  = '?';
+    label.textContent   = 'Guest';
+    dName.textContent   = 'Anonymous Guest';
+    dType.textContent   = 'History saved locally only';
+  } else {
+    badge.classList.remove('guest');
+    const name = user.displayName || user.email || 'User';
+    avatar.textContent  = name.charAt(0).toUpperCase();
+    label.textContent   = name.split(' ')[0];
+    dName.textContent   = name;
+    // fetch account type from Firestore
+    if (fbDb) {
+      fbDb.doc(`users/${user.uid}`).get().then(snap => {
+        const type = snap.data()?.accountType || 'consumer';
+        const labels = { consumer: 'Consumer', contractor: 'Contractor', corporation: 'Corporation' };
+        dType.textContent = labels[type] || type;
+      }).catch(() => {});
+    }
+  }
+}
+
+function toggleUserDropdown() {
+  document.getElementById('userDropdown').classList.toggle('open');
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('#userBadge')) {
+    document.getElementById('userDropdown')?.classList.remove('open');
+  }
+});
+
+// ── Auth actions ──
+async function authGoogle() {
+  if (!fbAuth) return;
+  setAuthError('');
+  try {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    await fbAuth.signInWithPopup(provider);
+  } catch (e) {
+    setAuthError(friendlyAuthError(e.code));
+  }
+}
+
+async function authSubmit() {
+  if (!fbAuth) return;
+  setAuthError('');
+  const email = document.getElementById('authEmail').value.trim();
+  const pass  = document.getElementById('authPass').value;
+  if (!email || !pass) { setAuthError('Enter your email and password.'); return; }
+
+  try {
+    if (authMode === 'signup') {
+      const name = document.getElementById('authName').value.trim();
+      const type = document.getElementById('authType').value;
+      if (!name) { setAuthError('Enter your full name.'); return; }
+      const cred = await fbAuth.createUserWithEmailAndPassword(email, pass);
+      await cred.user.updateProfile({ displayName: name });
+      if (fbDb) {
+        await fbDb.doc(`users/${cred.user.uid}`).set({
+          name, email, accountType: type,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+    } else {
+      await fbAuth.signInWithEmailAndPassword(email, pass);
+    }
+  } catch (e) {
+    setAuthError(friendlyAuthError(e.code));
+  }
+}
+
+async function authGuest() {
+  if (!fbAuth) { showApp(); return; }
+  try {
+    await fbAuth.signInAnonymously();
+  } catch (e) {
+    // If anonymous auth isn't enabled in Firebase, just open the app locally
+    currentUser = null;
+    showUserBadge({ isAnonymous: true });
+    showApp();
+  }
+}
+
+async function signOutUser() {
+  document.getElementById('userDropdown').classList.remove('open');
+  if (fbAuth) await fbAuth.signOut();
+  currentUser = null;
+  document.getElementById('userBadge').style.display = 'none';
+  document.querySelector('.shell').style.display = 'none';
+  document.getElementById('authScreen').style.display = 'flex';
+}
+
+function friendlyAuthError(code) {
+  const map = {
+    'auth/invalid-email':           'Invalid email address.',
+    'auth/user-not-found':          'No account found with that email.',
+    'auth/wrong-password':          'Incorrect password.',
+    'auth/email-already-in-use':    'An account with that email already exists.',
+    'auth/weak-password':           'Password must be at least 6 characters.',
+    'auth/popup-closed-by-user':    'Sign-in popup was closed.',
+    'auth/network-request-failed':  'Network error — check your connection.',
+    'auth/too-many-requests':       'Too many attempts — try again later.',
+  };
+  return map[code] || 'Something went wrong. Try again.';
 }
 
 // ── Product database ──
@@ -1395,9 +1774,13 @@ function countProducts() {
 
 function searchProducts(query, trade, limit = 30) {
   if (!PRODUCTS) return [];
-  const tradeItems   = Array.isArray(PRODUCTS[trade])   ? PRODUCTS[trade]   : [];
-  const generalItems = Array.isArray(PRODUCTS['general']) ? PRODUCTS['general'] : [];
-  const pool = [...tradeItems, ...generalItems];
+  // carpentry maps to framing + general product buckets
+  const tradeKey   = trade === 'carpentry' ? 'framing' : trade;
+  const tradeItems   = Array.isArray(PRODUCTS[tradeKey])    ? PRODUCTS[tradeKey]    : [];
+  const generalItems = Array.isArray(PRODUCTS['general'])   ? PRODUCTS['general']   : [];
+  const pool = trade === 'carpentry'
+    ? [...tradeItems, ...generalItems]
+    : [...tradeItems, ...generalItems];
 
   const stopWords = new Set(['the','and','for','with','from','that','this','have','will','need','a','an','in','on','at','to','of','or','is']);
   const keywords = query.toLowerCase()
@@ -1606,7 +1989,7 @@ function buildSystemPrompt(storeKey, inventoryContext = '') {
   return `You are a trade materials expert assistant for ${store.name} (aisles ${store.aisles}).
 ${locStr}
 
-The technician's trade category: ${currentTrade}.
+The technician's trade category: ${{ carpentry: 'Carpentry / Framing / Drywall', hvac: 'Basic HVAC', plumbing: 'Plumbing' }[currentTrade] || currentTrade}.
 ${inventoryContext}
 Your ONLY job is to produce a complete, precise material list so the technician can complete this job in ONE trip with ZERO return visits.
 
@@ -1982,39 +2365,63 @@ async function submitJob() {
 }
 
 // ── Job History ──
-function saveToHistory(entry) {
-  try {
-    const history = getHistory();
-    history.unshift({ ...entry, ts: Date.now() });
-    if (history.length > 10) history.length = 10;
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
-    refreshHistoryTrigger();
-  } catch {}
+async function saveToHistory(entry) {
+  const record = { ...entry, ts: Date.now() };
+  if (currentUser && !currentUser.isAnonymous && fbDb) {
+    try {
+      const col = fbDb.collection(`users/${currentUser.uid}/history`);
+      await col.add(record);
+      // Trim to 10 server-side (best-effort)
+      const snap = await col.orderBy('ts', 'desc').get();
+      const excess = snap.docs.slice(10);
+      excess.forEach(d => d.ref.delete());
+    } catch (e) { console.warn('Firestore save failed:', e); }
+  } else {
+    try {
+      const history = getLocalHistory();
+      history.unshift(record);
+      if (history.length > 10) history.length = 10;
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+    } catch {}
+  }
+  refreshHistoryTrigger();
 }
 
-function getHistory() {
+function getLocalHistory() {
   try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); }
   catch { return []; }
 }
 
-function refreshHistoryTrigger() {
-  const count = getHistory().length;
-  const btn   = document.getElementById('historyTrigger');
+async function getHistory() {
+  if (currentUser && !currentUser.isAnonymous && fbDb) {
+    try {
+      const snap = await fbDb.collection(`users/${currentUser.uid}/history`)
+        .orderBy('ts', 'desc').limit(10).get();
+      return snap.docs.map(d => d.data());
+    } catch { return []; }
+  }
+  return getLocalHistory();
+}
+
+async function refreshHistoryTrigger() {
+  const history = await getHistory();
+  const count   = history.length;
+  const btn     = document.getElementById('historyTrigger');
   btn.classList.toggle('has-items', count > 0);
   btn.textContent = count > 0 ? `📋 History (${count})` : '📋 History';
 }
 
-function openHistory() {
+async function openHistory() {
   document.getElementById('historyPanel').style.display = 'block';
-  renderHistoryList();
+  await renderHistoryList();
 }
 
 function closeHistory() {
   document.getElementById('historyPanel').style.display = 'none';
 }
 
-function renderHistoryList() {
-  const history = getHistory();
+async function renderHistoryList() {
+  const history = await getHistory();
   const list    = document.getElementById('historyList');
   const empty   = document.getElementById('historyEmpty');
   list.innerHTML = '';
@@ -2080,10 +2487,19 @@ function recallHistoryEntry(entry) {
   document.getElementById('resultsCard').classList.add('show');
 }
 
-function clearHistory() {
-  try { localStorage.removeItem(HISTORY_KEY); } catch {}
-  refreshHistoryTrigger();
-  renderHistoryList();
+async function clearHistory() {
+  if (currentUser && !currentUser.isAnonymous && fbDb) {
+    try {
+      const snap = await fbDb.collection(`users/${currentUser.uid}/history`).get();
+      const batch = fbDb.batch();
+      snap.docs.forEach(d => batch.delete(d.ref));
+      await batch.commit();
+    } catch (e) { console.warn('Firestore clear failed:', e); }
+  } else {
+    try { localStorage.removeItem(HISTORY_KEY); } catch {}
+  }
+  await refreshHistoryTrigger();
+  await renderHistoryList();
 }
 
 // ── Copy list ──
@@ -2136,6 +2552,8 @@ const ACCESS_SESSION = 'diagnostech_access';
 (function gateInit() {
   if (sessionStorage.getItem(ACCESS_SESSION) === 'granted') {
     document.getElementById('accessGate').style.display = 'none';
+    // authScreen stays hidden until Firebase resolves auth state in init()
+    // or shows immediately if Firebase isn't configured
   } else {
     document.body.style.overflow = 'hidden';
   }
@@ -2148,6 +2566,12 @@ function checkCode() {
     sessionStorage.setItem(ACCESS_SESSION, 'granted');
     document.getElementById('accessGate').style.display = 'none';
     document.body.style.overflow = '';
+    // If Firebase not configured or user already logged in, go straight to app
+    if (!fbAuth || (fbAuth && fbAuth.currentUser)) {
+      showApp();
+    } else {
+      document.getElementById('authScreen').style.display = 'flex';
+    }
   } else {
     err.textContent = 'Incorrect code — try again.';
     input.classList.remove('shake');
