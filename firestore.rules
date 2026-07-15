@@ -1,0 +1,39 @@
+// Firestore Security Rules for DiagnostechAI
+// Paste these into Firebase Console → Firestore → Rules tab, then Publish.
+//
+// Rule: each signed-in user can only read/write their own documents.
+// Anonymous users have NO server storage (localStorage only).
+// No cross-user access. No unauthenticated access.
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // User profile doc — only owner can read/write
+    match /users/{userId} {
+      allow read, write: if request.auth != null
+                         && !request.auth.token.firebase.sign_in_provider.matches('anonymous')
+                         && request.auth.uid == userId;
+
+      // Job history sub-collection — same owner-only rule
+      match /history/{historyId} {
+        allow read, delete: if request.auth != null
+                            && request.auth.uid == userId;
+
+        allow create: if request.auth != null
+                      && request.auth.uid == userId
+                      // Enforce max field sizes to prevent storage abuse
+                      && request.resource.data.keys().hasOnly(['ts','trade','store','prompt','result'])
+                      && request.resource.data.prompt is string
+                      && request.resource.data.prompt.size() <= 1000
+                      && request.resource.data.result is string
+                      && request.resource.data.result.size() <= 12000;
+      }
+    }
+
+    // Deny everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

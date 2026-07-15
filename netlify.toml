@@ -1,0 +1,30 @@
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # Prevent clickjacking / iframe embedding
+    X-Frame-Options = "DENY"
+
+    # Prevent MIME-type sniffing
+    X-Content-Type-Options = "nosniff"
+
+    # Only send referrer to same origin
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+    # Force HTTPS for 1 year, include subdomains
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
+
+    # Block XSS in older browsers
+    X-XSS-Protection = "1; mode=block"
+
+    # Permissions policy — disable features the app doesn't use
+    Permissions-Policy = "camera=(), payment=(), usb=(), magnetometer=(), accelerometer=()"
+
+    # Content Security Policy (single line — newlines are invalid in header values)
+    # Scripts: self + Firebase CDN + Google APIs (auth). Styles/fonts: Google Fonts.
+    # Connect: self (proxy) + Firebase + Nominatim geocoding.
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://identitytoolkit.googleapis.com https://nominatim.openstreetmap.org; img-src 'self' data: https:; frame-src https://*.firebaseapp.com; object-src 'none'; base-uri 'self'; form-action 'self'"
+
+[[redirects]]
+  from = "/api/ai"
+  to = "/.netlify/functions/ai-proxy"
+  status = 200

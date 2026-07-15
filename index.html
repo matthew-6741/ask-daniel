@@ -1530,11 +1530,11 @@ let authMode = 'signin'; // 'signin' | 'signup'
 })();
 
 // ─────────────────────────────────────────────
-// MODE — flip USE_LOCAL to switch backends
-//   false → Netlify proxy  (production — API key stays on server)
-//   true  → Ollama         (free local testing, no tokens)
+// MODE — auto-detected by hostname
+//   localhost → Ollama         (free local testing, no tokens)
+//   deployed  → Netlify proxy  (production — API key stays on server)
 // ─────────────────────────────────────────────
-const USE_LOCAL   = true;                        // ← toggle here
+const USE_LOCAL   = ['localhost', '127.0.0.1'].includes(location.hostname);
 const LOCAL_MODEL = 'qwen3.6';                   // ollama model name
 const LOCAL_URL   = 'http://localhost:11434/v1/chat/completions';
 
@@ -2376,7 +2376,14 @@ async function saveToHistory(entry) {
   if (currentUser && !currentUser.isAnonymous && fbDb) {
     try {
       const col = fbDb.collection(`users/${currentUser.uid}/history`);
-      await col.add(record);
+      // Firestore rules only allow: ts, trade, store, prompt, result (string)
+      await col.add({
+        ts:     record.ts,
+        trade:  record.trade,
+        store:  record.store,
+        prompt: record.prompt,
+        result: JSON.stringify(record.parsed),
+      });
       // Trim to 10 server-side (best-effort)
       const snap = await col.orderBy('ts', 'desc').get();
       const excess = snap.docs.slice(10);
@@ -2403,7 +2410,12 @@ async function getHistory() {
     try {
       const snap = await fbDb.collection(`users/${currentUser.uid}/history`)
         .orderBy('ts', 'desc').limit(10).get();
-      return snap.docs.map(d => d.data());
+      // Rebuild the parsed object from the stored JSON string
+      return snap.docs.map(d => {
+        const data = d.data();
+        try { data.parsed = JSON.parse(data.result); } catch { data.parsed = null; }
+        return data;
+      }).filter(e => e.parsed);
     } catch { return []; }
   }
   return getLocalHistory();
