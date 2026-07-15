@@ -1339,6 +1339,7 @@ textarea::placeholder { color: #b0b0a8; }
         <button class="trade-chip active" data-trade="plumbing"  onclick="setTrade(this)">🔧 Plumbing</button>
         <button class="trade-chip"        data-trade="hvac"      onclick="setTrade(this)">❄️ Basic HVAC</button>
         <button class="trade-chip"        data-trade="carpentry" onclick="setTrade(this)">🪵 Carpentry</button>
+        <button class="trade-chip"        data-trade="auto"      onclick="setTrade(this)">🚗 Auto</button>
       </div>
     </div>
 
@@ -1587,12 +1588,20 @@ const TEMPLATES = {
     'Install pre-hung interior door',
     'Build 10×12 pressure-treated deck, ground level',
   ],
+  auto: [
+    'Full oil change, 5W-30 synthetic, 2018 Honda Civic',
+    'Replace front brake pads and rotors',
+    'Replace car battery, group size 24F',
+    'Tune-up: spark plugs, air filter, cabin filter',
+    'Replace serpentine belt and coolant flush',
+  ],
 };
 
 const TRADE_ICONS = {
   plumbing: '🔧',
   hvac:     '❄️',
   carpentry:'🪵',
+  auto:     '🚗',
 };
 
 // ── Init ──
