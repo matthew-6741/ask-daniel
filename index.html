@@ -716,11 +716,11 @@ body {
   gap: 6px;
 }
 .trade-chip {
-  padding: 5px 11px;
+  padding: 12px 16px;
   border: 1px solid var(--border);
   border-radius: 20px;
   background: var(--bg);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--muted);
   cursor: pointer;
@@ -728,6 +728,7 @@ body {
   display: flex;
   align-items: center;
   gap: 5px;
+  min-height: 44px;
   font-family: 'DM Sans', sans-serif;
 }
 .trade-chip:hover { border-color: var(--accent); color: var(--accent); }
@@ -744,11 +745,11 @@ body {
   gap: 6px;
 }
 .tpl-chip {
-  padding: 5px 11px;
+  padding: 11px 14px;
   border: 1px solid var(--border);
   border-radius: 20px;
   background: var(--bg);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   cursor: pointer;
   transition: all .15s;
@@ -756,6 +757,9 @@ body {
   text-align: left;
   font-family: 'DM Sans', sans-serif;
   white-space: nowrap;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -992,9 +996,10 @@ textarea::placeholder { color: #b0b0a8; }
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 12px 18px;
+  padding: 14px 18px;
   border-bottom: 1px solid var(--border);
   transition: background .1s;
+  cursor: pointer;
 }
 .material-item:last-child { border-bottom: none; }
 .material-item:hover { background: var(--bg); }
@@ -1002,10 +1007,10 @@ textarea::placeholder { color: #b0b0a8; }
 .material-item.checked .material-name { text-decoration: line-through; }
 
 .item-check {
-  width: 20px;
-  height: 20px;
+  width: 26px;
+  height: 26px;
   border: 1.5px solid var(--border);
-  border-radius: 5px;
+  border-radius: 6px;
   flex-shrink: 0;
   margin-top: 1px;
   cursor: pointer;
@@ -2128,14 +2133,15 @@ function renderResults({ notes, tools, items }, storeKey) {
     const row   = document.createElement('div');
     row.className = 'material-item';
     row.dataset.index = i;
+    // Whole row is tappable — easier to hit while holding a part in the store
+    row.onclick = () => toggleItem(row, check);
 
     const check = document.createElement('div');
     check.className = 'item-check';
     check.setAttribute('role', 'checkbox');
     check.setAttribute('aria-checked', 'false');
     check.setAttribute('tabindex', '0');
-    check.onclick  = () => toggleItem(row, check);
-    check.onkeydown = e => { if (e.key === ' ' || e.key === 'Enter') toggleItem(row, check); };
+    check.onkeydown = e => { if (e.key === ' ' || e.key === 'Enter') { e.stopPropagation(); toggleItem(row, check); } };
 
     const body = document.createElement('div');
     body.className = 'item-body';
