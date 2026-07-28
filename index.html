@@ -1800,11 +1800,9 @@ function searchProducts(query, trade, limit = 30) {
   if (!PRODUCTS) return [];
   // carpentry maps to framing + general product buckets
   const tradeKey   = trade === 'carpentry' ? 'framing' : trade;
-  const tradeItems   = Array.isArray(PRODUCTS[tradeKey])    ? PRODUCTS[tradeKey]    : [];
-  const generalItems = Array.isArray(PRODUCTS['general'])   ? PRODUCTS['general']   : [];
-  const pool = trade === 'carpentry'
-    ? [...tradeItems, ...generalItems]
-    : [...tradeItems, ...generalItems];
+  const tradeItems   = Array.isArray(PRODUCTS[tradeKey])  ? PRODUCTS[tradeKey]  : [];
+  const generalItems = Array.isArray(PRODUCTS['general']) ? PRODUCTS['general'] : [];
+  const pool = [...tradeItems, ...generalItems];
 
   const stopWords = new Set(['the','and','for','with','from','that','this','have','will','need','a','an','in','on','at','to','of','or','is']);
   const keywords = query.toLowerCase()
@@ -2046,7 +2044,10 @@ function parseResponse(text) {
   const notesMatch = text.match(/NOTES:\s*(.+?)(?=\nTOOLS:|\nMATERIALS:|$)/s);
   const notes = notesMatch ? notesMatch[1].trim() : '';
 
-  const toolsMatch = text.match(/TOOLS:\s*([\s\S]+?)\/TOOLS/);
+  // Closing markers are optional — a smaller local model may omit them, and a
+  // response cut off by max_tokens never emits them. Falling back to the next
+  // section header (or end of text) keeps a good list from being thrown away.
+  const toolsMatch = text.match(/TOOLS:\s*([\s\S]+?)(?:\/TOOLS|(?=\nMATERIALS:)|$)/);
   const tools = [];
   if (toolsMatch) {
     const lines = toolsMatch[1].split('\n').map(l => l.trim()).filter(l => l.startsWith('-'));
@@ -2056,7 +2057,7 @@ function parseResponse(text) {
     }
   }
 
-  const matsMatch = text.match(/MATERIALS:\s*([\s\S]+?)\/MATERIALS/);
+  const matsMatch = text.match(/MATERIALS:\s*([\s\S]+?)(?:\/MATERIALS|$)/);
   const items = [];
   if (matsMatch) {
     const lines = matsMatch[1].split('\n').map(l => l.trim()).filter(l => l.startsWith('-'));
@@ -2078,8 +2079,13 @@ function setText(el, str) { el.textContent = str; }
 function calcTotal(items) {
   let low = 0, high = 0;
   items.forEach(item => {
-    const n = parseFloat(item.price.replace(/~?\$?/g, '').trim());
-    if (!isNaN(n)) { low += n * 0.9; high += n * 1.1; }
+    const n = parseFloat(String(item.price).replace(/[^0-9.]/g, ''));
+    if (isNaN(n)) return;
+    // Price is per-unit — multiply by quantity. Qty may read "2", "2 boxes", "1 roll".
+    const qty = parseFloat(String(item.qty).replace(/[^0-9.]/g, ''));
+    const mult = !isNaN(qty) && qty > 0 ? qty : 1;
+    low  += n * mult * 0.9;
+    high += n * mult * 1.1;
   });
   return low > 0 ? `$${Math.round(low)} – $${Math.round(high)}` : 'See in-store';
 }
@@ -2298,7 +2304,11 @@ async function fetchFromAPI(prompt, storeKey) {
     });
     const data = await response.json();
     if (response.status === 429) throw new Error(data.error || 'Rate limit reached — try again later.');
-    if (!response.ok || data.error) throw new Error(data.error?.message || `API error ${response.status}`);
+    if (!response.ok || data.error) {
+      // Anthropic returns {error:{message}}; our proxy returns {error:"string"}
+      const msg = typeof data.error === 'string' ? data.error : data.error?.message;
+      throw new Error(msg || `API error ${response.status}`);
+    }
     return data.content?.map(b => b.text || '').join('') || '';
   }
 }
@@ -2574,11 +2584,9 @@ function clearAll() {
   document.getElementById('errorMsg').classList.remove('show');
 }
 
-// ── Boot ──
-init();
-
 // ── Access gate ──
 // Change ACCESS_CODE below to whatever you want to give testers.
+// These must be declared before init() runs — init() reads ACCESS_SESSION.
 const ACCESS_CODE    = 'TRADE2026';
 const ACCESS_SESSION = 'diagnostech_access';
 
@@ -2618,6 +2626,9 @@ function checkCode() {
     }, 1500);
   }
 }
+
+// ── Boot (last — everything it touches is declared above) ──
+init();
 </script>
 </body>
 </html>
