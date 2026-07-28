@@ -19,3 +19,6 @@ node_modules/
 # Logs
 *.log
 npm-debug.log*
+
+# Internal working notes — kept local, not published
+CLAUDE.md
