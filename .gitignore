@@ -1,0 +1,21 @@
+# macOS
+.DS_Store
+
+# Secrets — never commit these
+.env
+.env.*
+!.env.example
+
+# Netlify
+.netlify/
+
+# Dependencies
+node_modules/
+
+# Editor
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
