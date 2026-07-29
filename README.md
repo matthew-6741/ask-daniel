@@ -18,11 +18,11 @@ and returns a single list: materials with quantities and specs, the tools the jo
 
 A general-purpose model will happily produce plausible-sounding products that don't exist. DiagnostechAI grounds every answer in a curated inventory instead:
 
-1. `searchProducts(query, trade)` keyword-scores a 181-item product database (`products.json`)
+1. `searchProducts(query, trade)` keyword-scores a hand-curated inventory for that trade (`products.json`)
 2. Top matches are injected into the system prompt as a **VERIFIED STORE INVENTORY** block
 3. The model is instructed to prefer verified items and mark anything it can't confirm with `(*)`
 
-The contractor can tell at a glance which line items are real and which need a second look.
+Coverage is deliberately narrow — being verifiably right about three trades beats being vaguely plausible about nine. The `(*)` marking is what makes that tradeoff safe: the contractor always knows which line items are backed by real inventory and which need checking before they drive to the store.
 
 ## Features
 
@@ -66,8 +66,10 @@ A `USE_LOCAL` toggle at the top of `index.html` swaps the proxy for a local Olla
 - **The Anthropic API key never reaches the browser.** Every model call routes through a serverless proxy that reads `ANTHROPIC_API_KEY` from the environment.
 - The model and token cap are pinned server-side, so a crafted request can't escalate to a pricier model.
 - Per-IP rate limiting (10 requests/hour) and input sanitization at the proxy.
-- CSP and HSTS headers set in `netlify.toml`.
 - Firestore rules restrict every document to its owner and cap field sizes.
+- `netlify.toml` sets HSTS (1 year, includeSubDomains), `X-Frame-Options: DENY`, `nosniff`, a strict referrer policy, and a permissions policy denying camera, payment, USB, and motion sensors.
+
+**Known gap:** the Content-Security-Policy currently requires `script-src 'unsafe-inline'`, because the UI still wires events through inline `onclick` handlers. That materially weakens the CSP's XSS protection, so it is not claimed as a defense here. Migrating to delegated event listeners is the next security task.
 
 To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
@@ -86,7 +88,7 @@ Set `USE_LOCAL = true` near the top of `index.html` to run against a local Ollam
 | Path | What it is |
 |---|---|
 | `index.html` | The entire client app |
-| `products.json` | 181-item product database used for retrieval |
+| `products.json` | Hand-curated per-trade inventory used for retrieval |
 | `netlify/functions/ai-proxy.js` | Serverless proxy that holds the API key |
 | `netlify.toml` | Security headers, CSP, redirects |
 | `firestore.rules` | Owner-only Firestore access rules |
