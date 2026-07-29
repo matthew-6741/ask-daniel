@@ -36,4 +36,4 @@ Out of scope:
 
 ## Supported versions
 
-DiagnostechAI is a continuously deployed web app in private beta. Only the currently deployed version at `diagnostechai.com` is supported — there are no tagged releases to patch.
+DiagnostechAI is a continuously deployed, pre-launch web app. Only the currently deployed version at `diagnostechai.com` is supported — there are no tagged releases to patch.

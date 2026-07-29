@@ -2,7 +2,7 @@
 
 **Describe the job. Get a one-trip material list with aisle numbers.**
 
-[diagnostechai.com](https://diagnostechai.com/) · Private beta
+[diagnostechai.com](https://diagnostechai.com/) · Deployed, pre-launch
 
 ---
 
