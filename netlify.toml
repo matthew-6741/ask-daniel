@@ -28,3 +28,8 @@
   from = "/api/ai"
   to = "/.netlify/functions/ai-proxy"
   status = 200
+
+[[redirects]]
+  from = "/api/consensus"
+  to = "/.netlify/functions/ai-consensus"
+  status = 200

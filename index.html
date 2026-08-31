@@ -1001,6 +1001,50 @@ textarea::placeholder { color: #b0b0a8; }
   transition: background .1s;
   cursor: pointer;
 }
+.agree-badge {
+  font-size: 11px;
+  margin-top: 5px;
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+.agree-badge.strong { background: #e8f5ec; color: #1e7e45; }
+.agree-badge.weak   { background: #fef6ec; color: #a86a10; }
+
+.consensus-toggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 14px;
+  margin-top: 10px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  background: var(--bg);
+  width: 100%;
+  text-align: left;
+  font-family: 'DM Sans', sans-serif;
+  min-height: 44px;
+}
+.consensus-toggle:hover { border-color: var(--accent); }
+.consensus-toggle.on {
+  border-style: solid;
+  border-color: var(--accent);
+  background: var(--accent-light);
+}
+.consensus-box {
+  width: 18px; height: 18px;
+  border: 1.5px solid var(--border);
+  border-radius: 5px;
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; color: #fff;
+}
+.consensus-toggle.on .consensus-box { background: var(--accent); border-color: var(--accent); }
+.consensus-label { font-size: 12.5px; font-weight: 500; color: var(--text); }
+.consensus-sub   { font-size: 11px; color: var(--muted); margin-top: 1px; }
+
 .material-item:last-child { border-bottom: none; }
 .material-item:hover { background: var(--bg); }
 .material-item.checked { opacity: .5; }
@@ -1417,6 +1461,14 @@ textarea::placeholder { color: #b0b0a8; }
         <div class="tip"><strong>Goal</strong>AI will list every item needed so you make one trip and return nothing.</div>
       </div>
 
+      <button class="consensus-toggle" id="consensusToggle" onclick="toggleConsensus()" type="button">
+        <div class="consensus-box" id="consensusBox"></div>
+        <div>
+          <div class="consensus-label">Cross-check with 3 AI models</div>
+          <div class="consensus-sub">Claude, Gemini and GPT each build the list — you see where they disagree. Slower.</div>
+        </div>
+      </button>
+
       <div class="submit-row" style="margin-top:14px">
         <button class="submit-btn" id="submitBtn" onclick="submitJob()" disabled>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
@@ -1546,9 +1598,14 @@ const LOCAL_URL   = 'http://localhost:11434/v1/chat/completions';
 
 // Production: calls /api/ai which routes to netlify/functions/ai-proxy.js
 // The real API key lives in Netlify environment variables — never in this file.
-const PROXY_URL  = '/api/ai';
-const MODEL      = 'claude-sonnet-4-6';
-const MAX_TOKENS = 1600;
+const PROXY_URL     = '/api/ai';
+const CONSENSUS_URL = '/api/consensus';   // fans out to Claude + Gemini + GPT
+const MODEL         = 'claude-sonnet-4-6';
+const MAX_TOKENS    = 1600;
+
+// Consensus is opt-in: it costs ~3x per run and is slower, so it's a
+// "double-check this" action rather than the default path.
+let consensusMode = false;
 
 const HISTORY_KEY = 'diagnostech_history';
 const CACHE_KEY   = 'diagnostech_cache';
@@ -2160,6 +2217,24 @@ function renderResults({ notes, tools, items }, storeKey) {
     body.appendChild(name);
     body.appendChild(spec);
 
+    // Consensus mode: show how many models agreed this item is needed.
+    if (item.votes && item.totalProviders > 1) {
+      const agree = document.createElement('div');
+      const unanimous = item.votes === item.totalProviders;
+      agree.className = 'agree-badge' + (unanimous ? ' strong' : ' weak');
+      setText(agree, unanimous
+        ? `✓ all ${item.totalProviders} models agree`
+        : `${item.votes} of ${item.totalProviders} models — ${item.providers.join(', ')} only`);
+      agree.title = 'Models that included this item: ' + item.providers.join(', ');
+      body.appendChild(agree);
+    }
+    if (item.aisleDisputed) {
+      const disp = document.createElement('div');
+      disp.className = 'agree-badge weak';
+      setText(disp, '⚠ models disagreed on the aisle — confirm in store');
+      body.appendChild(disp);
+    }
+
     const meta  = document.createElement('div');
     meta.className = 'item-meta';
     const qty   = document.createElement('div');
@@ -2313,6 +2388,36 @@ async function fetchFromAPI(prompt, storeKey) {
   }
 }
 
+// ── Multi-model consensus ──
+// Asks Claude, Gemini and GPT the same job in parallel and merges by vote.
+// Returns the same {notes, tools, items} shape as parseResponse, with each
+// item carrying votes/totalProviders so the UI can show agreement.
+async function fetchConsensus(prompt, storeKey) {
+  const matched   = searchProducts(prompt, currentTrade);
+  const inventory = formatProductsForPrompt(matched);
+  const system    = buildSystemPrompt(storeKey, inventory);
+
+  const response = await fetch(CONSENSUS_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      system,
+      prompt,
+      max_tokens: MAX_TOKENS,
+      // Send the verified rows so the server trusts real aisles over model guesses
+      verifiedAisles: matched.map(p => ({ name: p.name, aisle: `Aisle ${p.aisle}` })),
+    }),
+  });
+
+  const data = await response.json();
+  if (response.status === 429) throw new Error(data.error || 'Consensus limit reached — try again later.');
+  if (!response.ok || data.error) {
+    const msg = typeof data.error === 'string' ? data.error : data.error?.message;
+    throw new Error(msg || `Consensus error ${response.status}`);
+  }
+  return data;
+}
+
 // ── Loading step animation ──
 let stepTimer = null;
 function animateSteps() {
@@ -2370,8 +2475,13 @@ async function submitJob() {
   try {
     const measStr    = getMeasurementsStr();
     const fullPrompt = prompt + measStr;
-    const raw        = await fetchFromAPI(fullPrompt, currentStore);
-    const parsed     = parseResponse(raw);
+
+    let parsed;
+    if (consensusMode) {
+      parsed = await fetchConsensus(fullPrompt, currentStore);
+    } else {
+      parsed = parseResponse(await fetchFromAPI(fullPrompt, currentStore));
+    }
 
     if (parsed.items.length === 0) {
       throw new Error('No materials returned. Try rephrasing your description.');
@@ -2573,6 +2683,12 @@ function resetToInput() {
   document.getElementById('resultsCard').classList.remove('show');
   document.getElementById('errorMsg').classList.remove('show');
   document.getElementById('inputCard').style.display = 'block';
+}
+
+function toggleConsensus() {
+  consensusMode = !consensusMode;
+  document.getElementById('consensusToggle').classList.toggle('on', consensusMode);
+  document.getElementById('consensusBox').textContent = consensusMode ? '✓' : '';
 }
 
 function clearAll() {
