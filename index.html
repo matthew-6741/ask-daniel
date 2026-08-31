@@ -1043,6 +1043,19 @@ textarea::placeholder { color: #b0b0a8; }
 }
 .consensus-toggle.on .consensus-box { background: var(--accent); border-color: var(--accent); }
 .consensus-label { font-size: 12.5px; font-weight: 500; color: var(--text); }
+.consensus-toggle.locked { opacity: .72; }
+.consensus-toggle.locked .consensus-box { background: transparent; }
+.plan-tag {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .5px;
+  background: var(--accent);
+  color: #fff;
+  padding: 1px 5px;
+  border-radius: 4px;
+  margin-left: 5px;
+  vertical-align: 1px;
+}
 .consensus-sub   { font-size: 11px; color: var(--muted); margin-top: 1px; }
 
 .material-item:last-child { border-bottom: none; }
@@ -1464,8 +1477,8 @@ textarea::placeholder { color: #b0b0a8; }
       <button class="consensus-toggle" id="consensusToggle" onclick="toggleConsensus()" type="button">
         <div class="consensus-box" id="consensusBox"></div>
         <div>
-          <div class="consensus-label">Cross-check with 3 AI models</div>
-          <div class="consensus-sub">Claude, Gemini and GPT each build the list — you see where they disagree. Slower.</div>
+          <div class="consensus-label">Cross-check with 3 AI models <span class="plan-tag">PRO</span></div>
+          <div class="consensus-sub" id="consensusSub">Claude, Gemini and GPT each build the list — you see where they disagree. Slower.</div>
         </div>
       </button>
 
@@ -1604,8 +1617,14 @@ const MODEL         = 'claude-sonnet-4-6';
 const MAX_TOKENS    = 1600;
 
 // Consensus is opt-in: it costs ~3x per run and is slower, so it's a
-// "double-check this" action rather than the default path.
+// "double-check this" action rather than the default path. Pro plans only.
 let consensusMode = false;
+
+// Plan tier: 'free' (beta / everyone today) or 'pro' (paid).
+// The server re-derives this before charging real money — see resolveTier()
+// in ai-proxy.js. Client-side it only decides what UI to show.
+let currentPlan  = 'free';
+let lastProvider = '';
 
 const HISTORY_KEY = 'diagnostech_history';
 const CACHE_KEY   = 'diagnostech_cache';
@@ -1681,6 +1700,7 @@ async function init() {
         showUserBadge(user);
         refreshHistoryTrigger();
         showApp();
+        loadPlan();
       } else {
         const gatePassed = sessionStorage.getItem(ACCESS_SESSION) === 'granted';
         if (gatePassed) document.getElementById('authScreen').style.display = 'flex';
@@ -1696,6 +1716,20 @@ async function init() {
 function showApp() {
   document.getElementById('authScreen').style.display = 'none';
   document.querySelector('.shell').style.display      = 'flex';
+  applyPlanUI();
+}
+
+// Read the signed-in user's plan from Firestore. Everyone is 'free' during
+// beta; flip a user's plan field to 'pro' to grant paid features.
+async function loadPlan() {
+  currentPlan = 'free';
+  if (currentUser && !currentUser.isAnonymous && fbDb) {
+    try {
+      const doc = await fbDb.collection('users').doc(currentUser.uid).get();
+      if (doc.exists && doc.data().plan === 'pro') currentPlan = 'pro';
+    } catch { /* stay on free */ }
+  }
+  applyPlanUI();
 }
 
 // ── Auth UI helpers ──
@@ -2366,25 +2400,27 @@ async function fetchFromAPI(prompt, storeKey) {
     return data.choices?.[0]?.message?.content || '';
 
   } else {
-    // ── Netlify proxy → Claude API (API key never leaves the server) ──
+    // ── Netlify proxy (API keys never leave the server) ──
+    // The proxy picks the model from the tier: free -> Groq/Gemini free tier,
+    // pro -> Claude. It returns a normalized { text } regardless of provider.
     const response = await fetch(PROXY_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model:      MODEL,
+        tier:       currentPlan,
         max_tokens: MAX_TOKENS,
         system,
-        messages:   [{ role: 'user', content: prompt }],
+        prompt,
       }),
     });
     const data = await response.json();
     if (response.status === 429) throw new Error(data.error || 'Rate limit reached — try again later.');
     if (!response.ok || data.error) {
-      // Anthropic returns {error:{message}}; our proxy returns {error:"string"}
       const msg = typeof data.error === 'string' ? data.error : data.error?.message;
       throw new Error(msg || `API error ${response.status}`);
     }
-    return data.content?.map(b => b.text || '').join('') || '';
+    lastProvider = data.provider || '';
+    return data.text || '';
   }
 }
 
@@ -2686,9 +2722,32 @@ function resetToInput() {
 }
 
 function toggleConsensus() {
+  if (currentPlan !== 'pro') {
+    const sub = document.getElementById('consensusSub');
+    const original = sub.textContent;
+    setText(sub, 'Pro feature — free plan uses a single model. Upgrade to cross-check.');
+    sub.style.color = 'var(--accent)';
+    setTimeout(() => { setText(sub, original); sub.style.color = ''; }, 2600);
+    return;
+  }
   consensusMode = !consensusMode;
   document.getElementById('consensusToggle').classList.toggle('on', consensusMode);
   document.getElementById('consensusBox').textContent = consensusMode ? '✓' : '';
+}
+
+// Reflect the current plan in the UI. Call after auth resolves.
+function applyPlanUI() {
+  const pro = currentPlan === 'pro';
+  const toggle = document.getElementById('consensusToggle');
+  toggle.classList.toggle('locked', !pro);
+  setText(document.getElementById('consensusSub'), pro
+    ? 'Claude, Gemini and GPT each build the list — you see where they disagree. Slower.'
+    : 'Pro — cross-check the list against 3 AI models.');
+  if (!pro && consensusMode) {
+    consensusMode = false;
+    toggle.classList.remove('on');
+    document.getElementById('consensusBox').textContent = '';
+  }
 }
 
 function clearAll() {
