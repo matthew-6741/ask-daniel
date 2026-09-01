@@ -1,0 +1,15 @@
+# DiagnostechAI — robots.txt
+
+User-agent: *
+Allow: /
+Allow: /privacy.html
+
+# Confirmation and error pages carry no useful search content
+Disallow: /thanks.html
+Disallow: /404.html
+
+# Serverless endpoints — never useful to crawl
+Disallow: /api/
+Disallow: /.netlify/
+
+Sitemap: https://diagnostechai.netlify.app/sitemap.xml

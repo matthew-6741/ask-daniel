@@ -149,6 +149,27 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+
+<!-- Google Analytics (GA4)
+     Replace G-XXXXXXXXXX with your Measurement ID from analytics.google.com
+     → Admin → Data Streams → Web. Until you do, this stays inert. -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){ dataLayer.push(arguments); }
+  gtag('js', new Date());
+  gtag('config', 'G-XXXXXXXXXX', { anonymize_ip: true });
+</script>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://diagnostechai.netlify.app/" }
+  ]
+}
+</script>
 <style>
 /* ── Reset ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1203,6 +1224,27 @@ textarea::placeholder { color: #b0b0a8; }
 }
 .tip strong { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
 
+.site-footer {
+  margin-top: 26px;
+  padding: 18px 4px 8px;
+  text-align: center;
+  border-top: 1px solid var(--border);
+}
+.ai-note {
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.55;
+  max-width: 520px;
+  margin: 0 auto 12px;
+}
+.footer-links { font-size: 12px; margin-bottom: 8px; }
+.footer-links a { color: var(--muted); text-decoration: none; }
+.footer-links a:hover { color: var(--accent); text-decoration: underline; }
+.footer-links span { color: var(--border); margin: 0 7px; }
+.footer-copy { font-size: 11px; color: #a5a49c; }
+
+@media print { .site-footer { display: none; } }
+
 @media (max-width: 480px) {
   body { padding: 12px 10px 40px; }
   .store-row { gap: 6px; }
@@ -1560,10 +1602,24 @@ textarea::placeholder { color: #b0b0a8; }
       <div class="action-row">
         <button class="icon-btn" onclick="window.print()">🖨️ Print</button>
         <button class="icon-btn" onclick="copyList()">📋 Copy</button>
+        <button class="icon-btn" onclick="openDirections()">🧭 Directions</button>
         <button class="icon-btn" onclick="resetToInput()">← New job</button>
       </div>
     </div>
   </div>
+
+  <footer class="site-footer">
+    <p class="ai-note">
+      ⚠️ Material lists are AI-generated. Aisle numbers and prices are estimates —
+      confirm in store. Not a substitute for a licensed professional.
+    </p>
+    <nav class="footer-links">
+      <a href="/privacy.html">Privacy &amp; AI disclosure</a>
+      <span>·</span>
+      <a href="mailto:matthewsanchez00024@gmail.com">Report a wrong aisle</a>
+    </nav>
+    <p class="footer-copy">DiagnostechAI · Beta · Built by Matthew Sanchez</p>
+  </footer>
 
 </div><!-- /shell -->
 
@@ -2712,6 +2768,33 @@ function copyList() {
 }
 
 // ── Navigation ──
+// ── Maps + directions ──
+// Deep-links to the user's map app rather than embedding a map, so there's no
+// Maps API key, no billing account, and no extra script to load.
+function openDirections() {
+  const store = STORES[compareMode ? activeTab : currentStore];
+  const query = encodeURIComponent(store.name);
+  const isApple = /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent);
+
+  let url;
+  if (userLocation && userLocation.lat != null) {
+    const { lat, lon } = userLocation;
+    url = isApple
+      ? `https://maps.apple.com/?q=${query}&sll=${lat},${lon}`
+      : `https://www.google.com/maps/search/${query}/@${lat},${lon},13z`;
+  } else {
+    // No location yet — let the map app use its own idea of "near me"
+    url = isApple
+      ? `https://maps.apple.com/?q=${query}`
+      : `https://www.google.com/maps/search/?api=1&query=${query}`;
+  }
+
+  if (typeof gtag === 'function') {
+    gtag('event', 'directions_opened', { store: store.name, had_location: !!userLocation });
+  }
+  window.open(url, '_blank', 'noopener');
+}
+
 function resetToInput() {
   compareMode = false;
   document.getElementById('compareTabs').style.display    = 'none';

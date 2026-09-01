@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wrong aisle — DiagnostechAI</title>
+<meta name="robots" content="noindex">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#f4f3ef; --surface:#fff; --border:#e4e3dc; --text:#1a1a18;
+  --muted:#7a7a72; --accent:#E85B2A; --accent-light:#fdf0eb;
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body {
+  font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text);
+  min-height:100vh; display:flex; align-items:center; justify-content:center;
+  padding:24px; text-align:center;
+}
+.card {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:16px; padding:44px 34px; max-width:440px; width:100%;
+}
+.sign {
+  display:inline-block; background:var(--accent-light); color:var(--accent);
+  border:1px dashed var(--accent); border-radius:10px;
+  padding:8px 16px; font-size:12px; font-weight:600;
+  letter-spacing:1px; margin-bottom:22px;
+}
+.code { font-family:'Bebas Neue',sans-serif; font-size:76px; line-height:1; color:var(--accent); }
+h1 { font-size:19px; font-weight:600; margin:10px 0 8px; }
+p { font-size:14px; color:var(--muted); line-height:1.6; margin-bottom:24px; }
+.btn {
+  display:block; width:100%; padding:13px; border-radius:10px;
+  text-decoration:none; font-size:14px; font-weight:500; margin-bottom:9px;
+}
+.primary { background:var(--accent); color:#fff; }
+.primary:hover { background:#d24d1f; }
+.secondary { background:transparent; color:var(--muted); border:1px solid var(--border); }
+.secondary:hover { border-color:var(--accent); color:var(--accent); }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="sign">AISLE NOT FOUND</div>
+    <div class="code">404</div>
+    <h1>This one's not on the shelf</h1>
+    <p>The page you're looking for doesn't exist, moved, or never made it into the store. Happens to the best of us.</p>
+    <a class="btn primary" href="/">Back to the material list builder</a>
+    <a class="btn secondary" href="/privacy.html">Privacy &amp; AI disclosure</a>
+  </div>
+</body>
+</html>
