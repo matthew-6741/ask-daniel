@@ -2065,9 +2065,14 @@ function friendlyAuthError(code) {
 }
 
 // ── Product database ──
+// Bump PRODUCT_DB_VERSION whenever products.json changes. Without the query
+// param the browser keeps serving a cached copy, so users would stay on an old
+// product database indefinitely after a deploy.
+const PRODUCT_DB_VERSION = '2026-08-1';
+
 async function loadProducts() {
   try {
-    const res = await fetch('products.json');
+    const res = await fetch(`products.json?v=${PRODUCT_DB_VERSION}`);
     PRODUCTS = await res.json();
     console.log('[DiagnostechAI] Product DB loaded —', countProducts(), 'items');
   } catch {
@@ -2082,32 +2087,81 @@ function countProducts() {
     .reduce((sum, arr) => sum + arr.length, 0);
 }
 
+// Split text into comparable word tokens. Matching whole words matters: the old
+// substring test scored "low" against "hol(low) wall" and "oil" against "c(oil)",
+// so a query about tyres pulled back drywall anchors.
+function wordTokens(str) {
+  return String(str || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+}
+
+// Crude singular form so "brakes" matches "brake" and "plugs" matches "plug".
+function stem(w) {
+  if (w.length > 3 && w.endsWith('es')) return w.slice(0, -2);
+  if (w.length > 3 && w.endsWith('s'))  return w.slice(0, -1);
+  return w;
+}
+
+const SEARCH_STOP_WORDS = new Set([
+  'the','and','for','with','from','that','this','have','will','need','needs','needed',
+  'a','an','in','on','at','to','of','or','is','are','was','my','it','its','not','no',
+  'get','got','fix','fixing','fixed','replace','replacing','install','installing',
+  'broken','bad','new','old','out','off','up','down','all','some','any','keep','keeps',
+  'wont','cant','doesnt','isnt','when','then','after','before','very','just','also',
+]);
+
 function searchProducts(query, trade, limit = 30) {
   if (!PRODUCTS) return [];
-  // carpentry maps to framing + general product buckets
-  const tradeKey   = trade === 'carpentry' ? 'framing' : trade;
+  // carpentry maps onto the framing bucket in products.json
+  const tradeKey = trade === 'carpentry' ? 'framing' : trade;
   const tradeItems   = Array.isArray(PRODUCTS[tradeKey])  ? PRODUCTS[tradeKey]  : [];
   const generalItems = Array.isArray(PRODUCTS['general']) ? PRODUCTS['general'] : [];
-  const pool = [...tradeItems, ...generalItems];
 
-  const stopWords = new Set(['the','and','for','with','from','that','this','have','will','need','a','an','in','on','at','to','of','or','is']);
-  const keywords = query.toLowerCase()
-    .split(/[\s,./\\-]+/)
-    .filter(w => w.length > 2 && !stopWords.has(w));
+  // Same product can appear in several categories — keep one copy so duplicates
+  // don't eat the limited inventory budget we send to the model.
+  const seen = new Set();
+  const pool = [];
+  const push = (items, isTrade) => items.forEach(p => {
+    const key = p.name.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    pool.push({ ...p, _isTrade: isTrade });
+  });
+  push(tradeItems, true);
+  push(generalItems, false);
 
-  if (keywords.length === 0) return pool.slice(0, limit);
+  const keywords = [...new Set(
+    wordTokens(query).filter(w => w.length > 2 && !SEARCH_STOP_WORDS.has(w)).map(stem)
+  )];
+  if (keywords.length === 0) return pool.slice(0, limit).map(stripMeta);
 
   const scored = pool.map(p => {
-    const haystack = `${p.name} ${p.spec} ${(p.tags || []).join(' ')}`.toLowerCase();
-    const score = keywords.reduce((s, kw) => s + (haystack.includes(kw) ? 1 : 0), 0);
-    return { ...p, score };
-  });
+    const nameSet = new Set(wordTokens(p.name).map(stem));
+    const tagSet  = new Set((p.tags || []).flatMap(t => wordTokens(t)).map(stem));
+    const specSet = new Set(wordTokens(p.spec).map(stem));
 
-  return scored
-    .filter(p => p.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
+    // Weight by where the word hit: the product's own name is the strongest signal.
+    let score = 0;
+    for (const kw of keywords) {
+      if (nameSet.has(kw))      score += 3;
+      else if (tagSet.has(kw))  score += 2;
+      else if (specSet.has(kw)) score += 1;
+    }
+    // Trade-specific stock outranks the shared general bucket at equal relevance,
+    // so a car job can't be topped by drywall hardware.
+    if (score > 0 && p._isTrade) score += 1.5;
+    return { ...p, score };
+  }).filter(p => p.score > 0);
+
+  scored.sort((a, b) => b.score - a.score);
+
+  // Once there's a genuinely strong match, drop the weak single-field noise.
+  const best = scored.length ? scored[0].score : 0;
+  const filtered = best >= 4 ? scored.filter(p => p.score >= 2) : scored;
+
+  return filtered.slice(0, limit).map(stripMeta);
 }
+
+function stripMeta({ _isTrade, ...rest }) { return rest; }
 
 function formatProductsForPrompt(products) {
   if (!products.length) return '';
