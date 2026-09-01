@@ -202,19 +202,57 @@ const NOISE = new Set([
   'inch','inches','in','ft','feet','x','new','standard','type','size',
 ]);
 
+// Words that mean the same product written different ways.
+const ALIAS = { teflon: 'ptfe', antifreeze: 'coolant', sparkplug: 'spark' };
+
+// Light stemming so "pads" and "pad" are the same token.
+function stemTok(w) {
+  if (w.length > 3 && w.endsWith('es')) return w.slice(0, -2);
+  if (w.length > 3 && w.endsWith('s'))  return w.slice(0, -1);
+  return w;
+}
+
 function tokenize(name) {
-  return name
+  return String(name || '')
     .toLowerCase()
     .replace(/1-1\/2|1 1\/2|1\.5/g, '15')   // normalize common fractions
     .replace(/3\/4|0\.75/g, '34')
     .replace(/1\/2|0\.5/g, '12')
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
-    .filter(t => t.length > 1 && !NOISE.has(t));
+    .filter(t => t.length > 1 && !NOISE.has(t))
+    .map(stemTok)
+    .map(t => ALIAS[t] || t);
+}
+
+// Attributes that are mutually exclusive. Two names carrying different values
+// from the same group are different products however similar the rest reads —
+// "Copper Pipe 1/2" and "PVC Pipe 1/2" otherwise score 0.67 and would merge,
+// which could send someone home with the wrong material.
+const EXCLUSIVE_GROUPS = [
+  ['copper', 'pvc', 'cpvc', 'pex', 'ab', 'galvanized', 'brass', 'steel', 'iron'],
+  ['front', 'rear'],
+  ['hot', 'cold'],
+  ['interior', 'exterior'],
+  ['male', 'female'],
+  ['gas', 'electric'],
+  ['left', 'right'],
+];
+
+function conflicts(aTokens, bTokens) {
+  const aSet = new Set(aTokens), bSet = new Set(bTokens);
+  return EXCLUSIVE_GROUPS.some(group => {
+    const inA = group.filter(g => aSet.has(g));
+    const inB = group.filter(g => bSet.has(g));
+    if (!inA.length || !inB.length) return false;
+    // both name an attribute from this group — conflict unless they agree
+    return !inA.some(v => inB.includes(v));
+  });
 }
 
 function similarity(aTokens, bTokens) {
   if (!aTokens.length || !bTokens.length) return 0;
+  if (conflicts(aTokens, bTokens)) return 0;
   const bSet = new Set(bTokens);
   const shared = aTokens.filter(t => bSet.has(t)).length;
   return shared / Math.min(aTokens.length, bTokens.length);

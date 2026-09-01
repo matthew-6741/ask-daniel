@@ -2493,6 +2493,15 @@ MATERIALS:
 }
 
 // ── Parse AI response ──
+// A response cut off by max_tokens can end mid-field, leaving an aisle like
+// "Ais". Showing that as a real aisle is worse than admitting we don't know,
+// so anything without a digit falls back to a plain instruction.
+function cleanAisle(raw) {
+  const val = String(raw || '').trim();
+  if (!val) return 'Ask associate';
+  return /\d/.test(val) ? val : 'Ask associate';
+}
+
 function parseResponse(text) {
   const notesMatch = text.match(/NOTES:\s*(.+?)(?=\nTOOLS:|\nMATERIALS:|$)/s);
   const notes = notesMatch ? notesMatch[1].trim() : '';
@@ -2517,7 +2526,13 @@ function parseResponse(text) {
     for (const line of lines) {
       const parts = line.replace(/^-\s*/, '').split('|').map(p => p.trim());
       if (parts.length >= 4) {
-        items.push({ name: parts[0], spec: parts[1], qty: parts[2], aisle: parts[3], price: parts[4] || '' });
+        items.push({
+          name:  parts[0],
+          spec:  parts[1],
+          qty:   parts[2],
+          aisle: cleanAisle(parts[3]),
+          price: parts[4] || '',
+        });
       }
     }
   }
