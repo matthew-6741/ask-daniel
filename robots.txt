@@ -3,6 +3,7 @@
 User-agent: *
 Allow: /
 Allow: /privacy.html
+Allow: /terms.html
 
 # Confirmation and error pages carry no useful search content
 Disallow: /thanks.html

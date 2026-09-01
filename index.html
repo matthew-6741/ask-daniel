@@ -1288,6 +1288,13 @@ textarea::placeholder { color: #b0b0a8; }
 .ack-list li::before {
   content: '•'; position: absolute; left: 6px; color: var(--accent); font-weight: 700;
 }
+.ack-sub {
+  font-size: 11px; font-weight: 600; letter-spacing: .6px;
+  text-transform: uppercase; color: var(--muted);
+  margin: 4px 0 2px;
+}
+.ack-data li::before { content: '▸'; font-size: 11px; }
+.ack-check a { color: var(--accent); }
 .ack-check {
   display: flex; gap: 10px; align-items: flex-start;
   background: var(--bg); border: 1px solid var(--border);
@@ -1445,13 +1452,21 @@ textarea::placeholder { color: #b0b0a8; }
       <li><strong>This tells you what to buy, not how to do the job.</strong> For gas, electrical, structural, or permitted work, consult a licensed professional.</li>
     </ul>
 
+    <h3 class="ack-sub">What gets collected</h3>
+    <ul class="ack-list ack-data">
+      <li><strong>What you type or photograph is sent to an AI company</strong> (Anthropic, Google, OpenAI or Groq) to build your list. Don't include personal or sensitive details.</li>
+      <li><strong>Location is optional</strong> and only used to match regional stock. Decline it and everything still works.</li>
+      <li><strong>As a guest, nothing is stored on our servers</strong> — your history stays in this browser. Make an account and it's saved to Google Firebase instead.</li>
+      <li><strong>Anonymous usage stats</strong> are recorded via Google Analytics with your IP anonymised. We don't sell data and don't run ads.</li>
+    </ul>
+
     <label class="ack-check" for="ackBox">
       <input type="checkbox" id="ackBox" onchange="onAckChange()">
-      <span>I understand that AI can make mistakes and I'll verify anything that matters.</span>
+      <span>I understand AI can make mistakes and I'll verify anything that matters. I agree to the <a href="/terms.html" target="_blank" rel="noopener" onclick="event.stopPropagation()">Terms of Use</a> and the data collection described in the <a href="/privacy.html" target="_blank" rel="noopener" onclick="event.stopPropagation()">Privacy &amp; AI Disclosure</a>.</span>
     </label>
 
-    <button class="ack-btn" id="ackBtn" onclick="acceptAiAck()" disabled>Continue</button>
-    <a class="ack-link" href="/privacy.html">Read the full AI disclosure</a>
+    <button class="ack-btn" id="ackBtn" onclick="acceptAiAck()" disabled>Agree &amp; continue</button>
+    <a class="ack-link" href="/privacy.html">Read the full disclosures first</a>
   </div>
 </div>
 
@@ -1738,6 +1753,8 @@ textarea::placeholder { color: #b0b0a8; }
       confirm in store. Not a substitute for a licensed professional.
     </p>
     <nav class="footer-links">
+      <a href="/terms.html">Terms of Use</a>
+      <span>·</span>
       <a href="/privacy.html">Privacy &amp; AI disclosure</a>
       <span>·</span>
       <a href="/login.html">Sign in</a>
@@ -1896,7 +1913,9 @@ async function init() {
   }
 }
 
-const AI_ACK_KEY = 'diagnostech_ai_ack';
+// Versioned: bump this whenever the acknowledgement text or the Terms change,
+// so existing users re-consent rather than being held to wording they never saw.
+const AI_ACK_KEY = 'diagnostech_ai_ack_v2';
 
 function hasAcknowledgedAI() {
   try { return localStorage.getItem(AI_ACK_KEY) === 'yes'; } catch { return false; }
