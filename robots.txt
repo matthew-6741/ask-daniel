@@ -13,4 +13,4 @@ Disallow: /404.html
 Disallow: /api/
 Disallow: /.netlify/
 
-Sitemap: https://diagnostechai.netlify.app/sitemap.xml
+Sitemap: https://diagnostech.netlify.app/sitemap.xml

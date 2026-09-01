@@ -166,7 +166,7 @@
   "@context": "https://schema.org",
   "@type": "BreadcrumbList",
   "itemListElement": [
-    { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://diagnostechai.netlify.app/" }
+    { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://diagnostech.netlify.app/" }
   ]
 }
 </script>
@@ -1222,6 +1222,24 @@ textarea::placeholder { color: #b0b0a8; }
   line-height: 1.5;
 }
 .tip strong { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+
+.item-flag {
+  margin-top: 6px;
+  padding: 3px 9px;
+  font-size: 10.5px;
+  font-family: 'DM Sans', sans-serif;
+  color: var(--muted);
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 9px;
+  cursor: pointer;
+}
+.item-flag:hover { border-color: var(--accent); color: var(--accent); }
+.item-flag.flagged {
+  border-style: solid; border-color: var(--green);
+  color: var(--green); background: var(--green-bg); cursor: default;
+}
+@media print { .item-flag { display: none; } }
 
 /* ── Photo attachment ── */
 .header-tools { display: flex; gap: 7px; }
@@ -2594,6 +2612,16 @@ function renderResults({ notes, tools, items }, storeKey) {
       body.appendChild(disp);
     }
 
+    // Per-item correction. Aisle data is the product's weakest link and its
+    // core promise — this is the only way it gets better over time.
+    const flag = document.createElement('button');
+    flag.className = 'item-flag';
+    flag.type = 'button';
+    flag.textContent = 'Wrong aisle?';
+    flag.title = 'Tell us this aisle was wrong';
+    flag.onclick = e => { e.stopPropagation(); reportWrongAisle(item, flag); };
+    body.appendChild(flag);
+
     const meta  = document.createElement('div');
     meta.className = 'item-meta';
     const qty   = document.createElement('div');
@@ -3061,6 +3089,41 @@ function copyList() {
 }
 
 // ── Navigation ──
+// ── Aisle corrections ──
+// Stored locally and mirrored to Analytics. Reading them back:
+//   JSON.parse(localStorage.getItem('diagnostech_aisle_reports'))
+// In GA4 they arrive as the `wrong_aisle_reported` event, so you can see which
+// items get flagged most and fix products.json from real evidence.
+const AISLE_REPORT_KEY = 'diagnostech_aisle_reports';
+
+function reportWrongAisle(item, btn) {
+  const report = {
+    item:   item.name,
+    aisle:  item.aisle,
+    store:  (STORES[compareMode ? activeTab : currentStore] || {}).name || '',
+    trade:  currentTrade,
+    city:   userLocation ? userLocation.city : '',
+    ts:     Date.now(),
+  };
+
+  try {
+    const all = JSON.parse(localStorage.getItem(AISLE_REPORT_KEY) || '[]');
+    all.unshift(report);
+    localStorage.setItem(AISLE_REPORT_KEY, JSON.stringify(all.slice(0, 200)));
+  } catch {}
+
+  if (typeof gtag === 'function') {
+    gtag('event', 'wrong_aisle_reported', {
+      item_name: report.item, aisle: report.aisle,
+      store: report.store, trade: report.trade, city: report.city,
+    });
+  }
+
+  btn.textContent = '✓ Thanks — noted';
+  btn.classList.add('flagged');
+  btn.disabled = true;
+}
+
 // ── Maps + directions ──
 // Deep-links to the user's map app rather than embedding a map, so there's no
 // Maps API key, no billing account, and no extra script to load.
