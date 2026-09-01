@@ -1223,6 +1223,28 @@ textarea::placeholder { color: #b0b0a8; }
 }
 .tip strong { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
 
+/* ── Photo attachment ── */
+.header-tools { display: flex; gap: 7px; }
+.photo-strip {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px; margin-bottom: 12px;
+}
+.photo-strip img {
+  width: 60px; height: 60px; object-fit: cover;
+  border-radius: 8px; flex-shrink: 0; background: #ddd;
+}
+.photo-meta { flex: 1; min-width: 0; }
+.photo-name { font-size: 12.5px; font-weight: 500; color: var(--text); }
+.photo-hint { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.photo-remove {
+  width: 30px; height: 30px; flex-shrink: 0;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); color: var(--muted);
+  cursor: pointer; font-size: 13px; line-height: 1;
+}
+.photo-remove:hover { border-color: var(--red); color: var(--red); }
+
 /* ── First-run AI acknowledgement ── */
 #aiAckScreen {
   position: fixed; inset: 0; z-index: 900;
@@ -1565,10 +1587,26 @@ textarea::placeholder { color: #b0b0a8; }
 
     <!-- Describe -->
     <div class="card-header" style="border-top:1px solid var(--border)">
-      <div class="card-title">Describe the job or problem</div>
-      <button class="mic-btn" id="micBtn" onclick="toggleVoice()" title="Tap to speak">🎤</button>
+      <div class="card-title">Describe the job — or show it</div>
+      <div class="header-tools">
+        <button class="mic-btn" id="photoBtn" onclick="document.getElementById('photoInput').click()" title="Add a photo of the problem">📷</button>
+        <button class="mic-btn" id="micBtn" onclick="toggleVoice()" title="Tap to speak">🎤</button>
+      </div>
     </div>
     <div class="card-body">
+      <!-- capture="environment" opens the rear camera directly on phones -->
+      <input type="file" id="photoInput" accept="image/*" capture="environment"
+             style="display:none" onchange="onPhotoPicked(event)">
+
+      <div class="photo-strip" id="photoStrip" style="display:none">
+        <img id="photoPreview" alt="Photo of the job">
+        <div class="photo-meta">
+          <div class="photo-name" id="photoName">Photo attached</div>
+          <div class="photo-hint">The AI will read this along with your description.</div>
+        </div>
+        <button class="photo-remove" onclick="clearPhoto()" title="Remove photo">✕</button>
+      </div>
+
       <div class="prompt-wrap">
         <textarea id="prompt"
           placeholder="e.g. Replace a leaking P-trap under a kitchen sink, 1½ inch PVC, tenant building, need everything to do the job properly and not have to come back..."
@@ -2164,11 +2202,87 @@ function onInput() {
   cc.classList.toggle('warn', len > 700);
   ta.style.height = 'auto';
   ta.style.height = Math.min(ta.scrollHeight, 260) + 'px';
-  document.getElementById('submitBtn').disabled = ta.value.trim().length < 10;
+  // A photo on its own is a valid job — the AI can read the problem from it.
+  document.getElementById('submitBtn').disabled = ta.value.trim().length < 10 && !jobPhoto;
 }
 
 function onKey(e) {
   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) submitJob();
+}
+
+// ── Photo input ──
+// Phone cameras produce 3-12MP files. Sending those raw would blow past
+// Netlify's request limit and cost a fortune in image tokens, so downscale to
+// 1024px on the long edge before anything leaves the device.
+const PHOTO_MAX_EDGE = 1024;
+const PHOTO_QUALITY  = 0.82;
+let jobPhoto = null;   // { dataUrl, mediaType, bytes }
+
+function onPhotoPicked(evt) {
+  const file = evt.target.files?.[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    showPhotoError('That file isn\'t an image.');
+    return;
+  }
+  resizePhoto(file)
+    .then(photo => {
+      jobPhoto = photo;
+      document.getElementById('photoPreview').src = photo.dataUrl;
+      setText(document.getElementById('photoName'),
+              `Photo attached · ${Math.round(photo.bytes / 1024)} KB`);
+      document.getElementById('photoStrip').style.display = 'flex';
+      onInput();   // a photo alone is enough to enable the build button
+      if (typeof gtag === 'function') gtag('event', 'photo_attached');
+    })
+    .catch(() => showPhotoError('Could not read that image. Try another.'));
+
+  evt.target.value = '';   // let the same file be re-picked later
+}
+
+function resizePhoto(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        const scale = Math.min(1, PHOTO_MAX_EDGE / Math.max(img.width, img.height));
+        const w = Math.round(img.width  * scale);
+        const h = Math.round(img.height * scale);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+
+        const dataUrl = canvas.toDataURL('image/jpeg', PHOTO_QUALITY);
+        const base64  = dataUrl.split(',')[1] || '';
+        resolve({
+          dataUrl,
+          mediaType: 'image/jpeg',
+          base64,
+          bytes: Math.round(base64.length * 0.75),
+        });
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function clearPhoto() {
+  jobPhoto = null;
+  document.getElementById('photoStrip').style.display = 'none';
+  document.getElementById('photoPreview').removeAttribute('src');
+  onInput();
+}
+
+function showPhotoError(msg) {
+  const errEl = document.getElementById('errorMsg');
+  setText(errEl, '⚠️ ' + msg);
+  errEl.classList.add('show');
+  setTimeout(() => errEl.classList.remove('show'), 3200);
 }
 
 // ── Voice input ──
@@ -2540,6 +2654,15 @@ async function fetchFromAPI(prompt, storeKey) {
 
   if (USE_LOCAL) {
     // ── Ollama (OpenAI-compatible) ──
+    // Photos only work here if LOCAL_MODEL is vision-capable (llava, llama3.2-vision,
+    // qwen2.5vl…). A text-only local model will simply ignore the image.
+    const userContent = jobPhoto
+      ? [
+          { type: 'text', text: prompt },
+          { type: 'image_url', image_url: { url: `data:${jobPhoto.mediaType};base64,${jobPhoto.base64}` } },
+        ]
+      : prompt;
+
     const response = await fetch(LOCAL_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2548,7 +2671,7 @@ async function fetchFromAPI(prompt, storeKey) {
         temperature: 0,
         messages: [
           { role: 'system', content: system },
-          { role: 'user',   content: prompt },
+          { role: 'user',   content: userContent },
         ],
       }),
     });
@@ -2568,6 +2691,7 @@ async function fetchFromAPI(prompt, storeKey) {
         max_tokens: MAX_TOKENS,
         system,
         prompt,
+        image: jobPhoto ? { base64: jobPhoto.base64, mediaType: jobPhoto.mediaType } : null,
       }),
     });
     const data = await response.json();
@@ -2598,6 +2722,7 @@ async function fetchConsensus(prompt, storeKey) {
       system,
       prompt,
       max_tokens: MAX_TOKENS,
+      image: jobPhoto ? { base64: jobPhoto.base64, mediaType: jobPhoto.mediaType } : null,
       // Send the verified rows so the server trusts real aisles over model guesses
       verifiedAisles: matched.map(p => ({ name: p.name, aisle: `Aisle ${p.aisle}` })),
     }),
@@ -2647,8 +2772,12 @@ function stopSteps() {
 
 // ── Main submit ──
 async function submitJob() {
-  const prompt = document.getElementById('prompt').value.trim();
-  if (prompt.length < 10) return;
+  let prompt = document.getElementById('prompt').value.trim();
+  if (prompt.length < 10 && !jobPhoto) return;
+  // Photo with no description: tell the model to work from the image.
+  if (!prompt && jobPhoto) {
+    prompt = 'Identify the problem shown in the photo and list every material needed to fix it.';
+  }
 
   // Offline: serve cached list
   if (!navigator.onLine) {
@@ -2942,6 +3071,7 @@ function clearAll() {
   const ta = document.getElementById('prompt');
   ta.value = '';
   ta.style.height = 'auto';
+  clearPhoto();
   document.getElementById('charCount').textContent = '0 / 800';
   document.getElementById('submitBtn').disabled    = true;
   document.getElementById('errorMsg').classList.remove('show');

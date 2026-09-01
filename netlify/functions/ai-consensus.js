@@ -62,10 +62,30 @@ function sanitizeInput(text) {
     .trim();
 }
 
+const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+const ALLOWED_MEDIA = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+
+function validateImage(image) {
+  if (!image) return null;
+  if (typeof image !== 'object') return false;
+  const { base64, mediaType } = image;
+  if (typeof base64 !== 'string' || !base64) return false;
+  if (!ALLOWED_MEDIA.includes(mediaType)) return false;
+  if (!/^[A-Za-z0-9+/=]+$/.test(base64.slice(0, 256))) return false;
+  if (base64.length * 0.75 > MAX_IMAGE_BYTES) return false;
+  return { base64, mediaType };
+}
+
 // ── Provider adapters ────────────────────────────────────────────────
 // Each returns raw text in the NOTES/TOOLS/MATERIALS format, or throws.
 
-async function callClaude(system, prompt, maxTokens) {
+async function callClaude(system, prompt, maxTokens, image) {
+  const content = image
+    ? [
+        { type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.base64 } },
+        { type: 'text', text: prompt },
+      ]
+    : prompt;
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -78,7 +98,7 @@ async function callClaude(system, prompt, maxTokens) {
       max_tokens: maxTokens,
       temperature: 0,
       system,
-      messages: [{ role: 'user', content: prompt }],
+      messages: [{ role: 'user', content }],
     }),
   });
   const data = await res.json();
@@ -86,15 +106,17 @@ async function callClaude(system, prompt, maxTokens) {
   return data.content?.map(b => b.text || '').join('') || '';
 }
 
-async function callGemini(system, prompt, maxTokens) {
+async function callGemini(system, prompt, maxTokens, image) {
   const model = 'gemini-2.0-flash';
+  const parts = [{ text: prompt }];
+  if (image) parts.push({ inlineData: { mimeType: image.mediaType, data: image.base64 } });
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: system }] },
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      contents: [{ role: 'user', parts }],
       generationConfig: { temperature: 0, maxOutputTokens: maxTokens },
     }),
   });
@@ -103,7 +125,13 @@ async function callGemini(system, prompt, maxTokens) {
   return data.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
 }
 
-async function callOpenAI(system, prompt, maxTokens) {
+async function callOpenAI(system, prompt, maxTokens, image) {
+  const userContent = image
+    ? [
+        { type: 'text', text: prompt },
+        { type: 'image_url', image_url: { url: `data:${image.mediaType};base64,${image.base64}` } },
+      ]
+    : prompt;
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -116,7 +144,7 @@ async function callOpenAI(system, prompt, maxTokens) {
       max_tokens: maxTokens,
       messages: [
         { role: 'system', content: system },
-        { role: 'user', content: prompt },
+        { role: 'user', content: userContent },
       ],
     }),
   });
@@ -321,7 +349,12 @@ exports.handler = async (event) => {
   const maxTokens = Math.min(Number(body.max_tokens) || 1600, 2000);
   const verifiedAisles = Array.isArray(body.verifiedAisles) ? body.verifiedAisles.slice(0, 60) : null;
 
-  if (!prompt) {
+  const image = validateImage(body.image);
+  if (image === false) {
+    return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: 'That image could not be read. Try a smaller JPEG or PNG.' }) };
+  }
+
+  if (!prompt && !image) {
     return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: 'Missing job description.' }) };
   }
 
@@ -336,7 +369,7 @@ exports.handler = async (event) => {
 
   // Fan out in parallel. allSettled so one provider being down still returns a list.
   const settled = await Promise.allSettled(
-    active.map(p => p.call(system, prompt, maxTokens))
+    active.map(p => p.call(system, prompt, maxTokens, image))
   );
 
   const perProvider = [];

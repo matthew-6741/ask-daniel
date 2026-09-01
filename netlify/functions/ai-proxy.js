@@ -56,9 +56,37 @@ function sanitizeInput(text) {
     .trim();
 }
 
+// Validate an attached photo. Returns null when absent, false when malformed,
+// or the cleaned {base64, mediaType}. The client already downscales to ~1024px;
+// this cap is the backstop against a hand-crafted request.
+const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+const ALLOWED_MEDIA = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+
+function validateImage(image) {
+  if (!image) return null;
+  if (typeof image !== 'object') return false;
+
+  const { base64, mediaType } = image;
+  if (typeof base64 !== 'string' || !base64) return false;
+  if (!ALLOWED_MEDIA.includes(mediaType)) return false;
+  if (!/^[A-Za-z0-9+/=]+$/.test(base64.slice(0, 256))) return false;
+  if (base64.length * 0.75 > MAX_IMAGE_BYTES) return false;
+
+  return { base64, mediaType };
+}
+
 // ── Provider calls. Each returns raw text in the NOTES/TOOLS/MATERIALS format.
 
-async function callGroq(system, prompt, maxTokens) {
+async function callGroq(system, prompt, maxTokens, image) {
+  // Groq's text model can't see; its vision model can. Swap when a photo is sent.
+  const model = image ? 'llama-3.2-90b-vision-preview' : 'llama-3.3-70b-versatile';
+  const userContent = image
+    ? [
+        { type: 'text', text: prompt },
+        { type: 'image_url', image_url: { url: `data:${image.mediaType};base64,${image.base64}` } },
+      ]
+    : prompt;
+
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -66,12 +94,12 @@ async function callGroq(system, prompt, maxTokens) {
       'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
     },
     body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
+      model,
       temperature: 0,
       max_tokens: maxTokens,
       messages: [
         { role: 'system', content: system },
-        { role: 'user',   content: prompt },
+        { role: 'user',   content: userContent },
       ],
     }),
   });
@@ -80,14 +108,17 @@ async function callGroq(system, prompt, maxTokens) {
   return data.choices?.[0]?.message?.content || '';
 }
 
-async function callGemini(system, prompt, maxTokens) {
+async function callGemini(system, prompt, maxTokens, image) {
+  const parts = [{ text: prompt }];
+  if (image) parts.push({ inlineData: { mimeType: image.mediaType, data: image.base64 } });
+
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: system }] },
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      contents: [{ role: 'user', parts }],
       generationConfig: { temperature: 0, maxOutputTokens: maxTokens },
     }),
   });
@@ -96,7 +127,14 @@ async function callGemini(system, prompt, maxTokens) {
   return data.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
 }
 
-async function callClaude(system, prompt, maxTokens) {
+async function callClaude(system, prompt, maxTokens, image) {
+  const content = image
+    ? [
+        { type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.base64 } },
+        { type: 'text', text: prompt },
+      ]
+    : prompt;
+
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -109,7 +147,7 @@ async function callClaude(system, prompt, maxTokens) {
       max_tokens: maxTokens,
       temperature: 0,
       system,
-      messages: [{ role: 'user', content: prompt }],
+      messages: [{ role: 'user', content }],
     }),
   });
   const data = await res.json();
@@ -118,16 +156,15 @@ async function callClaude(system, prompt, maxTokens) {
 }
 
 // Pick a provider for the tier, falling back down the list if keys are missing.
-function pickProvider(tier) {
-  const freeChain = [
-    { name: 'Groq',   env: 'GROQ_API_KEY',      call: callGroq },
-    { name: 'Gemini', env: 'GEMINI_API_KEY',    call: callGemini },
-  ];
-  const proChain = [
-    { name: 'Claude', env: 'ANTHROPIC_API_KEY', call: callClaude },
-    ...freeChain,   // if the paid key is missing, still serve something
-  ];
-  const chain = tier === 'pro' ? proChain : freeChain;
+// Gemini leads the free chain when a photo is attached: its vision support is
+// on the same free tier, whereas Groq's vision model is a separate preview.
+function pickProvider(tier, hasImage) {
+  const groq   = { name: 'Groq',   env: 'GROQ_API_KEY',      call: callGroq };
+  const gemini = { name: 'Gemini', env: 'GEMINI_API_KEY',    call: callGemini };
+  const claude = { name: 'Claude', env: 'ANTHROPIC_API_KEY', call: callClaude };
+
+  const freeChain = hasImage ? [gemini, groq] : [groq, gemini];
+  const chain = tier === 'pro' ? [claude, ...freeChain] : freeChain;
   return chain.find(p => process.env[p.env]) || null;
 }
 
@@ -173,7 +210,22 @@ exports.handler = async (event) => {
     };
   }
 
-  const provider = pickProvider(tier);
+  // Accept both shapes: {system, prompt} and the older {system, messages:[...]}
+  const system = typeof body.system === 'string' ? body.system.slice(0, 16000) : '';
+  const rawPrompt = body.prompt ?? body.messages?.find(m => m.role === 'user')?.content ?? '';
+  const prompt = sanitizeInput(rawPrompt);
+  const maxTokens = Math.min(Number(body.max_tokens) || 1600, 2000);
+
+  const image = validateImage(body.image);
+  if (image === false) {
+    return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: 'That image could not be read. Try a smaller JPEG or PNG.' }) };
+  }
+
+  if (!prompt && !image) {
+    return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: 'Missing job description.' }) };
+  }
+
+  const provider = pickProvider(tier, !!image);
   if (!provider) {
     return {
       statusCode: 500,
@@ -182,18 +234,8 @@ exports.handler = async (event) => {
     };
   }
 
-  // Accept both shapes: {system, prompt} and the older {system, messages:[...]}
-  const system = typeof body.system === 'string' ? body.system.slice(0, 16000) : '';
-  const rawPrompt = body.prompt ?? body.messages?.find(m => m.role === 'user')?.content ?? '';
-  const prompt = sanitizeInput(rawPrompt);
-  const maxTokens = Math.min(Number(body.max_tokens) || 1600, 2000);
-
-  if (!prompt) {
-    return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: 'Missing job description.' }) };
-  }
-
   try {
-    const text = await provider.call(system, prompt, maxTokens);
+    const text = await provider.call(system, prompt, maxTokens, image);
     return {
       statusCode: 200,
       headers: {
