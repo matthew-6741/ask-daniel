@@ -15,31 +15,40 @@
 // Env vars (set whichever you have — missing providers are skipped, not fatal):
 //   ANTHROPIC_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY
 
-const RATE_LIMIT_MAX = 6;    // lower than single-model: each call costs 3x
-const RATE_LIMIT_WIN = 3600;
+// Cross-check is available to EVERYONE — the free plan just gets a smaller
+// allowance, because each run costs ~3x a normal list.
+//
+// NOTE ON DURABILITY: this counter lives in module memory, which Netlify wipes
+// on cold start. It deters casual overuse but is not real metering. Before this
+// gates anything you charge for, move the counters to Firestore keyed by uid.
+const LIMITS = {
+  free: { max: 5,  win: 86400 },  // 5 cross-checks per day
+  pro:  { max: 40, win: 3600  },  // 40 per hour
+};
 
 const rateLimitStore = {};
 
-function getRateLimitKey(event) {
-  return (
+function getRateLimitKey(event, tier) {
+  const ip =
     event.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
     event.headers['client-ip'] ||
-    'unknown'
-  );
+    'unknown';
+  return `consensus:${tier}:${ip}`;
 }
 
-function checkRateLimit(key) {
+function checkRateLimit(key, tier) {
+  const { max, win } = LIMITS[tier] || LIMITS.free;
   const now = Math.floor(Date.now() / 1000);
   const entry = rateLimitStore[key];
-  if (!entry || now - entry.windowStart > RATE_LIMIT_WIN) {
+  if (!entry || now - entry.windowStart > win) {
     rateLimitStore[key] = { count: 1, windowStart: now };
-    return { allowed: true, remaining: RATE_LIMIT_MAX - 1 };
+    return { allowed: true, remaining: max - 1, max };
   }
-  if (entry.count >= RATE_LIMIT_MAX) {
-    return { allowed: false, resetIn: entry.windowStart + RATE_LIMIT_WIN - now };
+  if (entry.count >= max) {
+    return { allowed: false, remaining: 0, max, resetIn: entry.windowStart + win - now };
   }
   entry.count += 1;
-  return { allowed: true, remaining: RATE_LIMIT_MAX - entry.count };
+  return { allowed: true, remaining: max - entry.count, max };
 }
 
 function sanitizeInput(text) {
@@ -285,18 +294,27 @@ exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: corsHeaders, body: '' };
   if (event.httpMethod !== 'POST')    return { statusCode: 405, headers: corsHeaders, body: 'Method not allowed' };
 
-  const rl = checkRateLimit(getRateLimitKey(event));
-  if (!rl.allowed) {
-    return {
-      statusCode: 429,
-      headers: { ...corsHeaders, 'Retry-After': String(rl.resetIn) },
-      body: JSON.stringify({ error: `Consensus limit reached. Try again in ${Math.ceil(rl.resetIn / 60)} minutes.` }),
-    };
-  }
-
   let body;
   try { body = JSON.parse(event.body); }
   catch { return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: 'Invalid JSON.' }) }; }
+
+  const tier = body.tier === 'pro' ? 'pro' : 'free';
+
+  const rl = checkRateLimit(getRateLimitKey(event, tier), tier);
+  if (!rl.allowed) {
+    const hrs = Math.ceil(rl.resetIn / 3600);
+    return {
+      statusCode: 429,
+      headers: { ...corsHeaders, 'Retry-After': String(rl.resetIn) },
+      body: JSON.stringify({
+        error: tier === 'free'
+          ? `You've used all ${rl.max} free cross-checks. More in about ${hrs} hour${hrs === 1 ? '' : 's'}, or upgrade for 40 an hour.`
+          : `Cross-check limit reached. Try again in ${Math.ceil(rl.resetIn / 60)} minutes.`,
+        tier,
+        upgradeSuggested: tier === 'free',
+      }),
+    };
+  }
 
   const system = typeof body.system === 'string' ? body.system.slice(0, 16000) : '';
   const prompt = sanitizeInput(body.prompt || '');
@@ -364,6 +382,9 @@ exports.handler = async (event) => {
       consensus: true,
       providers: status,
       respondedCount: perProvider.length,
+      tier,
+      remaining: rl.remaining,
+      limit: rl.max,
       notes: allNotes.length ? allNotes[0].note : '',
       tools: [...toolMap.values()],
       items,

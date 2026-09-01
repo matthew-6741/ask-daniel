@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign in — DiagnostechAI</title>
+<meta name="description" content="Sign in to DiagnostechAI to save your job history and material lists across devices.">
+<meta name="robots" content="noindex">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
+<style>
+:root {
+  --bg:#f4f3ef; --surface:#fff; --border:#e4e3dc; --text:#1a1a18;
+  --muted:#7a7a72; --accent:#E85B2A; --accent-light:#fdf0eb; --red:#c0392b;
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body {
+  font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text);
+  min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;
+}
+.card {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:16px; padding:34px 30px; max-width:420px; width:100%;
+}
+.crumbs { font-size:12px; color:var(--muted); margin-bottom:16px; }
+.crumbs a { color:var(--muted); text-decoration:none; }
+.crumbs a:hover { color:var(--accent); }
+.crumbs span { margin:0 5px; opacity:.6; }
+
+.brand { display:flex; align-items:center; gap:10px; margin-bottom:20px; }
+.mark {
+  width:38px; height:38px; background:var(--accent); border-radius:11px;
+  display:flex; align-items:center; justify-content:center;
+  color:#fff; font-weight:600; font-size:12px;
+}
+.brand-name { font-family:'Bebas Neue',sans-serif; font-size:19px; letter-spacing:.6px; }
+
+h1 { font-size:17px; font-weight:600; margin-bottom:5px; }
+.sub { font-size:13px; color:var(--muted); line-height:1.5; margin-bottom:20px; }
+
+.gbtn {
+  width:100%; display:flex; align-items:center; justify-content:center; gap:9px;
+  border:1px solid var(--border); border-radius:10px; padding:11px;
+  background:var(--surface); cursor:pointer; font-size:14px; font-weight:500;
+  color:var(--text); font-family:'DM Sans',sans-serif; margin-bottom:14px; min-height:44px;
+}
+.gbtn:hover { background:var(--bg); }
+
+.or { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+.or hr { flex:1; border:none; border-top:1px solid var(--border); }
+.or span { font-size:12px; color:var(--muted); }
+
+.tabs { display:flex; border:1px solid var(--border); border-radius:10px; overflow:hidden; margin-bottom:16px; }
+.tab {
+  flex:1; padding:10px; font-size:13px; border:none; background:var(--bg);
+  color:var(--muted); cursor:pointer; font-family:'DM Sans',sans-serif; min-height:42px;
+}
+.tab.active { background:var(--surface); color:var(--text); font-weight:600; }
+
+label.fl { display:block; font-size:11px; font-weight:600; color:var(--muted);
+  letter-spacing:.5px; margin:11px 0 5px; text-transform:uppercase; }
+input.fi, select.fi {
+  width:100%; border:1px solid var(--border); border-radius:9px; padding:11px 12px;
+  font-size:14px; background:var(--bg); color:var(--text);
+  font-family:'DM Sans',sans-serif; min-height:44px;
+}
+input.fi:focus, select.fi:focus { outline:none; border-color:var(--accent); }
+.hidden { display:none; }
+
+.err { font-size:12.5px; color:var(--red); min-height:17px; margin-top:9px; }
+.submit {
+  width:100%; background:var(--accent); color:#fff; border:none; border-radius:10px;
+  padding:13px; font-size:14.5px; font-weight:500; cursor:pointer;
+  font-family:'DM Sans',sans-serif; margin-top:6px; margin-bottom:10px; min-height:46px;
+}
+.submit:hover { background:#d24d1f; }
+.guest {
+  width:100%; background:transparent; color:var(--muted);
+  border:1px dashed var(--border); border-radius:10px; padding:11px;
+  font-size:13px; cursor:pointer; font-family:'DM Sans',sans-serif; min-height:44px;
+}
+.guest:hover { background:var(--bg); border-color:var(--accent); color:var(--accent); }
+.note { font-size:11.5px; color:var(--muted); text-align:center; margin-top:9px; line-height:1.5; }
+.note a { color:var(--muted); }
+</style>
+</head>
+<body>
+  <div class="card">
+    <nav class="crumbs" aria-label="Breadcrumb">
+      <a href="/">Home</a><span>›</span>Sign in
+    </nav>
+
+    <div class="brand">
+      <div class="mark">DA</div>
+      <div class="brand-name">DIAGNOSTECHAI</div>
+    </div>
+
+    <h1 id="heading">Welcome back</h1>
+    <p class="sub" id="subhead">Sign in to save your job history and material lists across devices.</p>
+
+    <button class="gbtn" onclick="withGoogle()">
+      <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+      Continue with Google
+    </button>
+
+    <div class="or"><hr><span>or</span><hr></div>
+
+    <div class="tabs">
+      <button class="tab active" id="tabIn" onclick="setMode('signin')">Sign In</button>
+      <button class="tab" id="tabUp" onclick="setMode('signup')">Create Account</button>
+    </div>
+
+    <div id="nameField" class="hidden">
+      <label class="fl" for="nameIn">Full name</label>
+      <input class="fi" id="nameIn" type="text" placeholder="Matthew Sanchez" autocomplete="name">
+    </div>
+
+    <div id="typeField" class="hidden">
+      <label class="fl" for="typeIn">Account type</label>
+      <select class="fi" id="typeIn">
+        <option value="consumer">Consumer — DIY / homeowner</option>
+        <option value="contractor">Contractor — working the trades</option>
+        <option value="corporation">Corporation — team or company</option>
+      </select>
+    </div>
+
+    <label class="fl" for="emailIn">Email</label>
+    <input class="fi" id="emailIn" type="email" placeholder="you@example.com" autocomplete="email">
+
+    <label class="fl" for="passIn">Password</label>
+    <input class="fi" id="passIn" type="password" placeholder="••••••••" autocomplete="current-password">
+
+    <div class="err" id="err"></div>
+
+    <button class="submit" id="submitBtn" onclick="submit()">Sign In</button>
+    <button class="guest" onclick="asGuest()">Continue as Guest</button>
+
+    <p class="note">
+      Guest history is saved on this device only.<br>
+      Lists are AI-generated and can be wrong — <a href="/privacy.html">see the AI disclosure</a>.
+    </p>
+  </div>
+
+<script>
+// Paste your config from Firebase Console → Project settings → Your apps.
+const FIREBASE_CONFIG = {
+  apiKey:            'YOUR_API_KEY',
+  authDomain:        'YOUR_PROJECT.firebaseapp.com',
+  projectId:         'YOUR_PROJECT',
+  storageBucket:     'YOUR_PROJECT.appspot.com',
+  messagingSenderId: 'YOUR_SENDER_ID',
+  appId:             'YOUR_APP_ID',
+};
+
+let fbAuth = null, fbDb = null, mode = 'signin';
+
+(function init() {
+  if (FIREBASE_CONFIG.apiKey === 'YOUR_API_KEY') return;  // not configured yet
+  try {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    fbAuth = firebase.auth();
+    fbDb   = firebase.firestore();
+    // Already signed in? Skip straight to the app.
+    fbAuth.onAuthStateChanged(u => { if (u) goToApp(); });
+  } catch (e) {
+    console.warn('Firebase init failed:', e.message);
+  }
+})();
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('tabIn').classList.toggle('active', m === 'signin');
+  document.getElementById('tabUp').classList.toggle('active', m === 'signup');
+  document.getElementById('nameField').classList.toggle('hidden', m !== 'signup');
+  document.getElementById('typeField').classList.toggle('hidden', m !== 'signup');
+  document.getElementById('submitBtn').textContent = m === 'signup' ? 'Create Account' : 'Sign In';
+  document.getElementById('heading').textContent   = m === 'signup' ? 'Create your account' : 'Welcome back';
+  document.getElementById('subhead').textContent   = m === 'signup'
+    ? 'Save job history across devices and get more cross-checks.'
+    : 'Sign in to save your job history and material lists across devices.';
+  document.getElementById('passIn').setAttribute('autocomplete', m === 'signup' ? 'new-password' : 'current-password');
+  setErr('');
+}
+
+function setErr(msg) { document.getElementById('err').textContent = msg; }
+
+function goToApp() {
+  // The gate lives on the main page; sessionStorage carries the pass through.
+  window.location.href = '/';
+}
+
+function noFirebase() {
+  setErr('Accounts are not switched on yet — use Continue as Guest.');
+}
+
+async function withGoogle() {
+  if (!fbAuth) return noFirebase();
+  setErr('');
+  try {
+    await fbAuth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+    goToApp();
+  } catch (e) { setErr(friendly(e.code)); }
+}
+
+async function submit() {
+  if (!fbAuth) return noFirebase();
+  setErr('');
+  const email = document.getElementById('emailIn').value.trim();
+  const pass  = document.getElementById('passIn').value;
+  if (!email || !pass) return setErr('Enter your email and password.');
+
+  try {
+    if (mode === 'signup') {
+      const name = document.getElementById('nameIn').value.trim();
+      const type = document.getElementById('typeIn').value;
+      const cred = await fbAuth.createUserWithEmailAndPassword(email, pass);
+      if (name) await cred.user.updateProfile({ displayName: name });
+      if (fbDb) {
+        await fbDb.collection('users').doc(cred.user.uid).set({
+          name: name || '', email, accountType: type, plan: 'free',
+          createdAt: Date.now(),
+        }, { merge: true });
+      }
+    } else {
+      await fbAuth.signInWithEmailAndPassword(email, pass);
+    }
+    goToApp();
+  } catch (e) { setErr(friendly(e.code)); }
+}
+
+function asGuest() {
+  try { sessionStorage.setItem('diagnostech_guest', 'yes'); } catch {}
+  goToApp();
+}
+
+function friendly(code) {
+  switch (code) {
+    case 'auth/invalid-email':          return 'That email address doesn’t look right.';
+    case 'auth/user-not-found':
+    case 'auth/wrong-password':
+    case 'auth/invalid-credential':     return 'Email or password is incorrect.';
+    case 'auth/email-already-in-use':   return 'An account already uses that email — try signing in.';
+    case 'auth/weak-password':          return 'Use at least 6 characters for the password.';
+    case 'auth/popup-closed-by-user':   return 'Sign-in window closed before finishing.';
+    case 'auth/too-many-requests':      return 'Too many attempts. Wait a moment and try again.';
+    case 'auth/network-request-failed': return 'Network problem — check your connection.';
+    default:                            return 'Could not sign you in. Please try again.';
+  }
+}
+
+document.getElementById('passIn').addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+document.getElementById('emailIn').addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+</script>
+</body>
+</html>

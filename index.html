@@ -1064,8 +1064,7 @@ textarea::placeholder { color: #b0b0a8; }
 }
 .consensus-toggle.on .consensus-box { background: var(--accent); border-color: var(--accent); }
 .consensus-label { font-size: 12.5px; font-weight: 500; color: var(--text); }
-.consensus-toggle.locked { opacity: .72; }
-.consensus-toggle.locked .consensus-box { background: transparent; }
+.plan-tag.free { background: #6f6e68; }
 .plan-tag {
   font-size: 9px;
   font-weight: 700;
@@ -1224,6 +1223,51 @@ textarea::placeholder { color: #b0b0a8; }
 }
 .tip strong { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
 
+/* ── First-run AI acknowledgement ── */
+#aiAckScreen {
+  position: fixed; inset: 0; z-index: 900;
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px; overflow-y: auto;
+}
+.ack-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; padding: 32px 30px;
+  max-width: 460px; width: 100%; margin: auto;
+}
+.ack-icon { font-size: 30px; margin-bottom: 10px; }
+.ack-title { font-size: 20px; font-weight: 600; margin-bottom: 8px; }
+.ack-lede { font-size: 14px; color: #333330; line-height: 1.6; margin-bottom: 18px; }
+.ack-list { list-style: none; margin-bottom: 20px; }
+.ack-list li {
+  font-size: 13px; color: #4a4a45; line-height: 1.5;
+  padding: 9px 0 9px 22px; position: relative;
+  border-bottom: 1px solid var(--border);
+}
+.ack-list li:last-child { border-bottom: none; }
+.ack-list li::before {
+  content: '•'; position: absolute; left: 6px; color: var(--accent); font-weight: 700;
+}
+.ack-check {
+  display: flex; gap: 10px; align-items: flex-start;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 10px; padding: 13px 14px; margin-bottom: 14px;
+  cursor: pointer; font-size: 13px; line-height: 1.45; color: var(--text);
+}
+.ack-check input { margin-top: 2px; width: 17px; height: 17px; accent-color: var(--accent); flex-shrink: 0; cursor: pointer; }
+.ack-btn {
+  width: 100%; padding: 13px; border: none; border-radius: 10px;
+  background: var(--accent); color: #fff; font-size: 14.5px; font-weight: 500;
+  font-family: 'DM Sans', sans-serif; cursor: pointer; min-height: 46px;
+}
+.ack-btn:disabled { background: #dcdad2; color: #97968e; cursor: not-allowed; }
+.ack-btn:not(:disabled):hover { background: #d24d1f; }
+.ack-link {
+  display: block; text-align: center; margin-top: 12px;
+  font-size: 12.5px; color: var(--muted); text-decoration: none;
+}
+.ack-link:hover { color: var(--accent); text-decoration: underline; }
+
 .site-footer {
   margin-top: 26px;
   padding: 18px 4px 8px;
@@ -1344,6 +1388,30 @@ textarea::placeholder { color: #b0b0a8; }
 
     <button class="auth-guest-btn" onclick="authGuest()">Continue as Guest</button>
     <div class="auth-guest-note">Guest history is saved locally on this device only.</div>
+  </div>
+</div>
+
+<!-- ── First-run AI acknowledgement ── -->
+<div id="aiAckScreen" style="display:none">
+  <div class="ack-card">
+    <div class="ack-icon">⚠️</div>
+    <h2 class="ack-title">Before you start</h2>
+    <p class="ack-lede">DiagnostechAI builds your material lists with artificial intelligence. That means it is fast and thorough, and it also means it can be wrong.</p>
+
+    <ul class="ack-list">
+      <li><strong>Aisle numbers are estimates.</strong> Layouts differ by store and change after remodels.</li>
+      <li><strong>Prices are approximate</strong> and won't match your receipt exactly.</li>
+      <li><strong>Items can be missed or invented.</strong> Anything marked (*) wasn't matched to our verified product database.</li>
+      <li><strong>This tells you what to buy, not how to do the job.</strong> For gas, electrical, structural, or permitted work, consult a licensed professional.</li>
+    </ul>
+
+    <label class="ack-check" for="ackBox">
+      <input type="checkbox" id="ackBox" onchange="onAckChange()">
+      <span>I understand that AI can make mistakes and I'll verify anything that matters.</span>
+    </label>
+
+    <button class="ack-btn" id="ackBtn" onclick="acceptAiAck()" disabled>Continue</button>
+    <a class="ack-link" href="/privacy.html">Read the full AI disclosure</a>
   </div>
 </div>
 
@@ -1519,7 +1587,7 @@ textarea::placeholder { color: #b0b0a8; }
       <button class="consensus-toggle" id="consensusToggle" onclick="toggleConsensus()" type="button">
         <div class="consensus-box" id="consensusBox"></div>
         <div>
-          <div class="consensus-label">Cross-check with 3 AI models <span class="plan-tag">PRO</span></div>
+          <div class="consensus-label">Cross-check with 3 AI models <span class="plan-tag free" id="planTag">FREE</span></div>
           <div class="consensus-sub" id="consensusSub">Claude, Gemini and GPT each build the list — you see where they disagree. Slower.</div>
         </div>
       </button>
@@ -1616,6 +1684,8 @@ textarea::placeholder { color: #b0b0a8; }
     <nav class="footer-links">
       <a href="/privacy.html">Privacy &amp; AI disclosure</a>
       <span>·</span>
+      <a href="/login.html">Sign in</a>
+      <span>·</span>
       <a href="mailto:matthewsanchez00024@gmail.com">Report a wrong aisle</a>
     </nav>
     <p class="footer-copy">DiagnostechAI · Beta · Built by Matthew Sanchez</p>
@@ -1681,6 +1751,7 @@ let consensusMode = false;
 // in ai-proxy.js. Client-side it only decides what UI to show.
 let currentPlan  = 'free';
 let lastProvider = '';
+let consensusLeft = null;   // remaining cross-checks, reported by the server
 
 const HISTORY_KEY = 'diagnostech_history';
 const CACHE_KEY   = 'diagnostech_cache';
@@ -1769,10 +1840,40 @@ async function init() {
   }
 }
 
+const AI_ACK_KEY = 'diagnostech_ai_ack';
+
+function hasAcknowledgedAI() {
+  try { return localStorage.getItem(AI_ACK_KEY) === 'yes'; } catch { return false; }
+}
+
+// Every new user acknowledges that AI can make mistakes before using the app.
 function showApp() {
   document.getElementById('authScreen').style.display = 'none';
-  document.querySelector('.shell').style.display      = 'flex';
+
+  if (!hasAcknowledgedAI()) {
+    document.getElementById('aiAckScreen').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    return;
+  }
+  revealShell();
+}
+
+function revealShell() {
+  document.getElementById('aiAckScreen').style.display = 'none';
+  document.body.style.overflow = '';
+  document.querySelector('.shell').style.display = 'flex';
   applyPlanUI();
+}
+
+function onAckChange() {
+  document.getElementById('ackBtn').disabled = !document.getElementById('ackBox').checked;
+}
+
+function acceptAiAck() {
+  if (!document.getElementById('ackBox').checked) return;
+  try { localStorage.setItem(AI_ACK_KEY, 'yes'); } catch {}
+  if (typeof gtag === 'function') gtag('event', 'ai_disclaimer_accepted');
+  revealShell();
 }
 
 // Read the signed-in user's plan from Firestore. Everyone is 'free' during
@@ -2493,6 +2594,7 @@ async function fetchConsensus(prompt, storeKey) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
+      tier: currentPlan,
       system,
       prompt,
       max_tokens: MAX_TOKENS,
@@ -2502,10 +2604,18 @@ async function fetchConsensus(prompt, storeKey) {
   });
 
   const data = await response.json();
-  if (response.status === 429) throw new Error(data.error || 'Consensus limit reached — try again later.');
+  if (response.status === 429) {
+    consensusLeft = 0;
+    applyPlanUI();
+    throw new Error(data.error || 'Cross-check limit reached — try again later.');
+  }
   if (!response.ok || data.error) {
     const msg = typeof data.error === 'string' ? data.error : data.error?.message;
-    throw new Error(msg || `Consensus error ${response.status}`);
+    throw new Error(msg || `Cross-check error ${response.status}`);
+  }
+  if (typeof data.remaining === 'number') {
+    consensusLeft = data.remaining;
+    applyPlanUI();
   }
   return data;
 }
@@ -2804,33 +2914,28 @@ function resetToInput() {
   document.getElementById('inputCard').style.display = 'block';
 }
 
+// Cross-check is open to everyone. Free plans get a smaller daily allowance
+// because each run costs about 3x a normal list.
 function toggleConsensus() {
-  if (currentPlan !== 'pro') {
-    const sub = document.getElementById('consensusSub');
-    const original = sub.textContent;
-    setText(sub, 'Pro feature — free plan uses a single model. Upgrade to cross-check.');
-    sub.style.color = 'var(--accent)';
-    setTimeout(() => { setText(sub, original); sub.style.color = ''; }, 2600);
-    return;
-  }
   consensusMode = !consensusMode;
   document.getElementById('consensusToggle').classList.toggle('on', consensusMode);
   document.getElementById('consensusBox').textContent = consensusMode ? '✓' : '';
 }
 
-// Reflect the current plan in the UI. Call after auth resolves.
+// Reflect plan + remaining allowance in the UI.
 function applyPlanUI() {
   const pro = currentPlan === 'pro';
-  const toggle = document.getElementById('consensusToggle');
-  toggle.classList.toggle('locked', !pro);
-  setText(document.getElementById('consensusSub'), pro
-    ? 'Claude, Gemini and GPT each build the list — you see where they disagree. Slower.'
-    : 'Pro — cross-check the list against 3 AI models.');
-  if (!pro && consensusMode) {
-    consensusMode = false;
-    toggle.classList.remove('on');
-    document.getElementById('consensusBox').textContent = '';
+  document.getElementById('planTag').textContent = pro ? 'PRO' : 'FREE';
+  document.getElementById('planTag').classList.toggle('free', !pro);
+
+  let sub = 'Claude, Gemini and GPT each build the list — you see where they disagree. Slower.';
+  if (consensusLeft != null) {
+    sub = consensusLeft > 0
+      ? `${consensusLeft} cross-check${consensusLeft === 1 ? '' : 's'} left${pro ? ' this hour' : ' today'}. Slower, but shows where the models disagree.`
+      : (pro ? 'Hourly limit reached — try again shortly.'
+             : 'Daily free cross-checks used up. Upgrade for 40 an hour.');
   }
+  setText(document.getElementById('consensusSub'), sub);
 }
 
 function clearAll() {
