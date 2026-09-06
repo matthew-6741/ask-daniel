@@ -1658,8 +1658,8 @@ textarea::placeholder { color: #b0b0a8; }
       <button class="consensus-toggle" id="consensusToggle" onclick="toggleConsensus()" type="button">
         <div class="consensus-box" id="consensusBox"></div>
         <div>
-          <div class="consensus-label">Cross-check with 3 AI models <span class="plan-tag free" id="planTag">FREE</span></div>
-          <div class="consensus-sub" id="consensusSub">Claude, Gemini and GPT each build the list — you see where they disagree. Slower.</div>
+          <div class="consensus-label">Council review <span class="plan-tag free" id="planTag">FREE</span></div>
+          <div class="consensus-sub" id="consensusSub">Two models build the list independently, then a third reviews both and resolves conflicts. Slower.</div>
         </div>
       </button>
 
@@ -1811,7 +1811,7 @@ const LOCAL_URL   = 'http://localhost:11434/v1/chat/completions';
 // Production: calls /api/ai which routes to netlify/functions/ai-proxy.js
 // The real API key lives in Netlify environment variables — never in this file.
 const PROXY_URL     = '/api/ai';
-const CONSENSUS_URL = '/api/consensus';   // fans out to Claude + Gemini + GPT
+const CONSENSUS_URL = '/api/council';     // Gemini + Groq answer, then a judge synthesizes
 const MODEL         = 'claude-sonnet-4-6';
 const MAX_TOKENS    = 1600;
 
@@ -1825,6 +1825,7 @@ let consensusMode = false;
 let currentPlan  = 'free';
 let lastProvider = '';
 let consensusLeft = null;   // remaining cross-checks, reported by the server
+let lastCouncil  = null;   // metadata from the last /api/council response
 
 const HISTORY_KEY = 'diagnostech_history';
 const CACHE_KEY   = 'diagnostech_cache';
@@ -2594,11 +2595,14 @@ function renderResults({ notes, tools, items }, storeKey) {
     tb.style.display = 'none';
   }
 
-  // Item count
-  setText(
-    document.getElementById('itemCountLine'),
-    `${items.length} item${items.length !== 1 ? 's' : ''} · check off as you pick`
-  );
+  // Item count — mention the council when one ran
+  let countLine = `${items.length} item${items.length !== 1 ? 's' : ''} · check off as you pick`;
+  if (lastCouncil && lastCouncil.judged) {
+    countLine += ` · reviewed by ${lastCouncil.judge} after ${lastCouncil.opinionsUsed.length} independent drafts`;
+  } else if (lastCouncil && lastCouncil.opinionsUsed) {
+    countLine += ` · single draft (${lastCouncil.opinionsUsed.join(', ')})`;
+  }
+  setText(document.getElementById('itemCountLine'), countLine);
 
   // Materials
   const list = document.getElementById('materialList');
@@ -2628,15 +2632,23 @@ function renderResults({ notes, tools, items }, storeKey) {
     body.appendChild(name);
     body.appendChild(spec);
 
-    // Consensus mode: show how many models agreed this item is needed.
-    if (item.votes && item.totalProviders > 1) {
+    // Council mode: the aisle badge says whether it came from verified data.
+    if (lastCouncil && lastCouncil.judged) {
+      const src = document.createElement('div');
+      const verified = item.aisleVerified;
+      src.className = 'agree-badge ' + (verified ? 'strong' : 'weak');
+      setText(src, verified
+        ? '✓ aisle from verified inventory'
+        : '⚠ aisle unverified — confirm in store');
+      body.appendChild(src);
+    } else if (item.votes && item.totalProviders > 1) {
+      // Legacy vote display (older /api/consensus responses)
       const agree = document.createElement('div');
       const unanimous = item.votes === item.totalProviders;
       agree.className = 'agree-badge' + (unanimous ? ' strong' : ' weak');
       setText(agree, unanimous
         ? `✓ all ${item.totalProviders} models agree`
         : `${item.votes} of ${item.totalProviders} models — ${item.providers.join(', ')} only`);
-      agree.title = 'Models that included this item: ' + item.providers.join(', ');
       body.appendChild(agree);
     }
     if (item.aisleDisputed) {
@@ -2858,6 +2870,7 @@ async function fetchConsensus(prompt, storeKey) {
     consensusLeft = data.remaining;
     applyPlanUI();
   }
+  lastCouncil = data.council ? data : null;
   return data;
 }
 
@@ -3208,10 +3221,10 @@ function applyPlanUI() {
   document.getElementById('planTag').textContent = pro ? 'PRO' : 'FREE';
   document.getElementById('planTag').classList.toggle('free', !pro);
 
-  let sub = 'Claude, Gemini and GPT each build the list — you see where they disagree. Slower.';
+  let sub = 'Two models build the list independently, then a third reviews both and resolves conflicts. Slower.';
   if (consensusLeft != null) {
     sub = consensusLeft > 0
-      ? `${consensusLeft} cross-check${consensusLeft === 1 ? '' : 's'} left${pro ? ' this hour' : ' today'}. Slower, but shows where the models disagree.`
+      ? `${consensusLeft} cross-check${consensusLeft === 1 ? '' : 's'} left${pro ? ' this hour' : ' today'}. Slower, but a judge checks the drafts against each other.`
       : (pro ? 'Hourly limit reached — try again shortly.'
              : 'Daily free cross-checks used up. Upgrade for 40 an hour.');
   }
