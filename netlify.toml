@@ -40,9 +40,11 @@
   to = "/.netlify/functions/ai-proxy"
   status = 200
 
+# Legacy path kept so any cached client keeps working — council is now the
+# single review implementation.
 [[redirects]]
   from = "/api/consensus"
-  to = "/.netlify/functions/ai-consensus"
+  to = "/.netlify/functions/ai-council"
   status = 200
 
 [[redirects]]

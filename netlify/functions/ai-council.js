@@ -26,10 +26,65 @@ const MODELS = {
   xai:        'grok-2-vision-1212',
 };
 
-const LIMITS = {
-  free: { max: 5,  win: 86400 },
-  pro:  { max: 40, win: 3600  },
+// ── Plan configuration ───────────────────────────────────────────────
+// Council review itself is available to EVERYONE. Plans differ only in how
+// often you can run it and how large the council is. Adding a paid tier later
+// should mean editing this block, not rewriting the flow.
+const PLANS = {
+  free: {
+    label:        'Free',
+    max:          5,          // council runs per window
+    win:          86400,      // 24h
+    maxOpinions:  2,          // Gemini + Groq
+    allowPaid:    false,      // never call paid providers
+    maxTokens:    1600,
+  },
+  pro: {
+    label:        'Pro',
+    max:          40,
+    win:          3600,       // 1h
+    maxOpinions:  4,          // wider council when paid mode is on
+    allowPaid:    true,       // still gated by ENABLE_PAID_COUNCIL
+    maxTokens:    2000,
+  },
 };
+
+function planFor(tier) {
+  return PLANS[tier] || PLANS.free;
+}
+
+// Resolve the caller's plan.
+//
+// SECURITY — READ BEFORE CHARGING MONEY: this trusts the client's `tier`
+// field. That is fine while every account is free, because both tiers cost the
+// same (nothing) and paid providers are independently gated by
+// ENABLE_PAID_COUNCIL. The moment Pro is a paid product, this must verify a
+// Firebase ID token and read the plan from Firestore — otherwise anyone can
+// set tier:'pro' in devtools and take the larger allowance.
+//
+// The verification hook is stubbed below so wiring it later is a small change.
+async function resolveTier(body, event) {
+  const claimed = body.tier === 'pro' ? 'pro' : 'free';
+  if (claimed === 'free') return 'free';
+
+  const verifier = process.env.FIREBASE_PROJECT_ID ? verifyProToken : null;
+  if (!verifier) return 'free';   // can't prove Pro -> treat as free
+
+  try {
+    const token = (event.headers.authorization || '').replace(/^Bearer\s+/i, '');
+    return (await verifier(token)) ? 'pro' : 'free';
+  } catch {
+    return 'free';
+  }
+}
+
+// Stub: implement when Pro launches.
+// Verify the Firebase ID token, then read users/{uid}.plan from Firestore and
+// return true only when it equals 'pro'. Until then Pro is unreachable, which
+// is the safe default.
+async function verifyProToken(/* idToken */) {
+  return false;
+}
 
 // Per-provider timeout. Netlify kills synchronous functions around 10s, and
 // Promise.allSettled waits for the slowest — without this one hung provider
@@ -51,7 +106,7 @@ function getRateLimitKey(event, tier) {
 }
 
 function checkRateLimit(key, tier) {
-  const { max, win } = LIMITS[tier] || LIMITS.free;
+  const { max, win } = planFor(tier);
   const now = Math.floor(Date.now() / 1000);
   const e = rateLimitStore[key];
   if (!e || now - e.windowStart > win) {
@@ -189,7 +244,8 @@ const callGrok = (s, p, m, i) =>
   callOpenAICompatible('https://api.x.ai/v1/chat/completions', process.env.XAI_API_KEY, MODELS.xai, s, p, m, i);
 
 // Free council never includes paid providers, regardless of which keys exist.
-function councilMembers() {
+function councilMembers(tier) {
+  const plan = planFor(tier);
   const free = [
     { name: 'Gemini', env: 'GEMINI_API_KEY', call: callGemini, paid: false },
     { name: 'Groq',   env: 'GROQ_API_KEY',   call: callGroq,   paid: false },
@@ -199,8 +255,11 @@ function councilMembers() {
     { name: 'GPT',    env: 'OPENAI_API_KEY',    call: callOpenAI, paid: true },
     { name: 'Grok',   env: 'XAI_API_KEY',       call: callGrok,   paid: true },
   ];
-  const pool = paidEnabled() ? [...free, ...paid] : free;
-  return pool.filter(m => process.env[m.env]);
+  // Paid providers require BOTH a plan that allows them and the server switch.
+  // Either one being off keeps them out, so a leaked tier claim can't spend money.
+  const usePaid = plan.allowPaid && paidEnabled();
+  const pool = usePaid ? [...free, ...paid] : free;
+  return pool.filter(m => process.env[m.env]).slice(0, plan.maxOpinions);
 }
 
 // The judge must be able to read images too, since it re-checks photo jobs.
@@ -329,7 +388,8 @@ exports.handler = async (event) => {
   try { body = JSON.parse(event.body); }
   catch { return { statusCode: 400, headers: cors, body: JSON.stringify({ error: 'Invalid JSON.' }) }; }
 
-  const tier = body.tier === 'pro' ? 'pro' : 'free';
+  const tier = await resolveTier(body, event);
+  const plan = planFor(tier);
   const rl = checkRateLimit(getRateLimitKey(event, tier), tier);
   if (!rl.allowed) {
     const hrs = Math.ceil(rl.resetIn / 3600);
@@ -347,7 +407,7 @@ exports.handler = async (event) => {
 
   const system = typeof body.system === 'string' ? body.system.slice(0, 16000) : '';
   const prompt = sanitizeInput(body.prompt || '');
-  const maxTokens = Math.min(Number(body.max_tokens) || 1600, 2000);
+  const maxTokens = Math.min(Number(body.max_tokens) || 1600, plan.maxTokens);
   const verifiedAisles = Array.isArray(body.verifiedAisles) ? body.verifiedAisles.slice(0, 60) : null;
 
   const image = validateImage(body.image);
@@ -358,7 +418,7 @@ exports.handler = async (event) => {
     return { statusCode: 400, headers: cors, body: JSON.stringify({ error: 'Missing job description.' }) };
   }
 
-  const members = councilMembers();
+  const members = councilMembers(tier);
   if (!members.length) {
     return { statusCode: 500, headers: cors, body: JSON.stringify({ error: 'No AI providers configured on the server.' }) };
   }
@@ -437,7 +497,8 @@ exports.handler = async (event) => {
     headers: { ...cors, 'Content-Type': 'application/json', 'X-RateLimit-Remaining': String(rl.remaining) },
     body: JSON.stringify({
       council: true,
-      mode: paidEnabled() ? 'paid' : 'free',
+      mode: (plan.allowPaid && paidEnabled()) ? 'paid' : 'free',
+      plan: plan.label,
       judged,
       judge: judgeName,
       opinionsUsed: drafts.map(d => d.provider),
