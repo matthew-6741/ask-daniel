@@ -365,8 +365,13 @@ Rules:
 6. List the tools required in the TOOLS section.
 7. If measurements are provided, calculate EXACT quantities and round up to sellable pack sizes.
 8. Never invent an aisle number you are not confident about — write "Ask associate" instead.
+9. Mark each item's confidence honestly: "high" when you are sure the job needs it, "medium" when it depends on what they find, "low" when you are guessing. Guessing and saying so is more useful than sounding certain.
 
-Respond ONLY in this exact format — no extra text outside the tags:
+Respond as JSON matching this shape:
+{"notes": "...", "tools": [{"name":"...","why":"..."}],
+ "materials": [{"name":"...","spec":"...","qty":"...","aisle":"Aisle 12","price":"~$8.47","confidence":"high"}]}
+
+If you cannot produce JSON, use this exact text format instead:
 
 NOTES: <one or two sentences about code/permit/safety concerns, or "None.">
 
@@ -413,6 +418,7 @@ function openAICompatible({ url, keyEnv, model, visionModel }) {
         model: image && visionModel ? visionModel : model,
         temperature: 0,
         max_tokens: maxTokens,
+        response_format: { type: 'json_object' },
         messages: [{ role: 'system', content: system }, { role: 'user', content }],
       }),
     });
@@ -464,7 +470,12 @@ async function geminiOnce(model, system, prompt, maxTokens, image) {
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: system }] },
       contents: [{ role: 'user', parts }],
-      generationConfig: { temperature: 0, maxOutputTokens: maxTokens },
+      generationConfig: {
+        temperature: 0,
+        maxOutputTokens: maxTokens,
+        responseMimeType: 'application/json',
+        responseSchema: LIST_SCHEMA,
+      },
     }),
   });
   const data = await res.json();
@@ -552,6 +563,76 @@ function councilMembers(tier, hasImage) {
 function pickJudge(tier, hasImage, drafterIds = []) {
   const judges = eligibleAgents(tier, { role: 'judge', hasImage });
   return judges.find(j => !drafterIds.includes(j.id)) || judges[0] || null;
+}
+
+// ── Structured output ────────────────────────────────────────────────
+//
+// Both providers can return JSON directly. Asking for JSON removes the entire
+// class of bug that has cost the most time on this project: a response cut off
+// before its closing marker, a model that omits /MATERIALS, an aisle field
+// truncated to "Ais", a reasoning model whose prose never matched the format.
+// The text parser stays as a fallback for models that ignore the instruction.
+const LIST_SCHEMA = {
+  type: 'object',
+  properties: {
+    notes: { type: 'string' },
+    tools: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { name: { type: 'string' }, why: { type: 'string' } },
+        required: ['name'],
+      },
+    },
+    materials: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          name:  { type: 'string' },
+          spec:  { type: 'string' },
+          qty:   { type: 'string' },
+          aisle: { type: 'string' },
+          price: { type: 'string' },
+          // The model states its own certainty rather than the UI inferring it.
+          confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+        },
+        required: ['name', 'spec', 'qty'],
+      },
+    },
+  },
+  required: ['notes', 'materials'],
+};
+
+// Accept either shape: parsed JSON, or the older tagged text.
+function normalizeResponse(raw) {
+  const text = String(raw || '').trim();
+
+  // JSON first — providers sometimes wrap it in a code fence.
+  const candidate = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+  if (candidate.startsWith('{')) {
+    try {
+      const j = JSON.parse(candidate);
+      if (Array.isArray(j.materials)) {
+        return {
+          notes: String(j.notes || ''),
+          tools: (j.tools || []).map(t => ({ name: String(t.name || ''), why: String(t.why || '') })).filter(t => t.name),
+          items: j.materials.map(m => ({
+            name:  String(m.name || ''),
+            spec:  String(m.spec || ''),
+            qty:   String(m.qty || '1'),
+            aisle: cleanAisle(m.aisle),
+            price: String(m.price || ''),
+            confidence: ['high', 'medium', 'low'].includes(m.confidence) ? m.confidence : 'medium',
+          })).filter(m => m.name),
+          format: 'json',
+        };
+      }
+    } catch { /* fall through to the text parser */ }
+  }
+
+  const parsed = parseResponse(text);
+  return { ...parsed, format: 'text' };
 }
 
 // ── Parsing ──────────────────────────────────────────────────────────
@@ -677,9 +758,15 @@ function verifyAisles(items, verifiedAisles) {
       const s = similarity(t, tokenize(row.name));
       if (s > 0.7 && s > score) { score = s; best = row.aisle; }
     }
+    // Confidence the user sees is not the model's opinion alone. A verified
+    // aisle is a fact from our data; an unverified one is a guess however
+    // certain the model sounded. Report both so the UI can be honest about
+    // which is which rather than presenting one number as though it covered
+    // both the part and its location.
+    const stated = item.confidence || 'medium';
     return best
-      ? { ...item, aisle: best, aisleVerified: true }
-      : { ...item, aisleVerified: false };
+      ? { ...item, aisle: best, aisleVerified: true,  aisleConfidence: 'verified', itemConfidence: stated }
+      : { ...item, aisleVerified: false, aisleConfidence: 'unverified', itemConfidence: stated };
   });
 }
 
@@ -806,8 +893,8 @@ exports.handler = async (event) => {
   const status = [];
   settled.forEach((r, i) => {
     const name = members[i].name;
-    if (r.status === 'fulfilled' && parseResponse(r.value).items.length) {
-      drafts.push({ id: members[i].id, provider: name, raw: r.value, parsed: parseResponse(r.value) });
+    if (r.status === 'fulfilled' && normalizeResponse(r.value).items.length) {
+      drafts.push({ id: members[i].id, provider: name, raw: r.value, parsed: normalizeResponse(r.value) });
       status.push({ provider: name, ok: true, stage: 'opinion', itemCount: parseResponse(r.value).items.length });
     } else {
       const why = r.status === 'rejected'
@@ -847,7 +934,7 @@ exports.handler = async (event) => {
           Math.max(JUDGE_MIN_MS, msLeft() - 300),
           'Judge'
         );
-        const parsed = parseResponse(verdict);
+        const parsed = normalizeResponse(verdict);
         if (parsed.items.length) {
           finalParsed = parsed;
           judged = true;
@@ -922,6 +1009,12 @@ exports.handler = async (event) => {
         verifiedCount: items.filter(i => i.aisleVerified).length,
         estimatedLow:  Number(items.reduce((n, i) => n + priceOf(i) * qtyOf(i) * 0.9, 0).toFixed(2)),
         estimatedHigh: Number(items.reduce((n, i) => n + priceOf(i) * qtyOf(i) * 1.1, 0).toFixed(2)),
+        lowConfidenceItems: items.filter(i => i.itemConfidence === 'low').length,
+        // What fraction of aisles came from real data rather than a guess.
+        // This is the number worth watching as the product database grows.
+        aisleVerifiedRatio: items.length
+          ? Number((items.filter(i => i.aisleVerified).length / items.length).toFixed(2))
+          : 0,
       },
     }),
   };
