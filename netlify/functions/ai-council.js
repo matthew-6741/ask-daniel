@@ -143,6 +143,13 @@ const STAGE_TIMEOUT_MS  = OPINION_BUDGET_MS;
 // deterrence; it is not a billing meter.
 const { getStore } = require('@netlify/blobs');
 
+function getRateLimitKey(event, tier) {
+  const ip =
+    (event.headers['x-forwarded-for'] || '').split(',')[0].trim() ||
+    event.headers['client-ip'] || 'unknown';
+  return `council:${tier}:${ip}`;
+}
+
 function limitStore() {
   return getStore({ name: 'rate-limits', consistency: 'strong' });
 }
@@ -909,7 +916,10 @@ exports.handler = async (event) => {
   }
 
   // Built here, never taken from the request.
-  // Retrieval happens here, from our own database.
+  const prompt = sanitizeInput(body.prompt || '');
+  const maxTokens = Math.min(Number(body.max_tokens) || 1600, plan.maxTokens);
+
+  // Retrieval happens here, from our own database — after `prompt` exists.
   const serverInventory = lookupInventory(body.trade, prompt);
   const system = buildSystemPrompt({
     storeKey:      body.store,
@@ -918,8 +928,6 @@ exports.handler = async (event) => {
     region:        body.region,
     inventoryRows: serverInventory,
   });
-  const prompt = sanitizeInput(body.prompt || '');
-  const maxTokens = Math.min(Number(body.max_tokens) || 1600, plan.maxTokens);
 
 
   const image = validateImage(body.image);

@@ -1005,42 +1005,10 @@ textarea::placeholder { color: #b0b0a8; }
 .agree-badge.strong { background: #e8f5ec; color: #1e7e45; }
 .agree-badge.weak   { background: #fef6ec; color: #a86a10; }
 
-.consensus-toggle {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 11px 14px;
-  margin-top: 10px;
-  border: 1px dashed var(--border);
-  border-radius: 10px;
-  cursor: pointer;
-  background: var(--bg);
-  width: 100%;
-  text-align: left;
-  font-family: 'DM Sans', sans-serif;
-  min-height: 44px;
-}
-.consensus-toggle:hover { border-color: var(--accent); }
-.consensus-toggle.on {
   border-style: solid;
   border-color: var(--accent);
   background: var(--accent-light);
 }
-.consensus-box {
-  width: 18px; height: 18px;
-  border: 1.5px solid var(--border);
-  border-radius: 5px;
-  flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 12px; color: #fff;
-}
-.consensus-toggle.on .consensus-box { background: var(--accent); border-color: var(--accent); }
-.consensus-box.on::after {
-  content: ''; width: 9px; height: 5px; margin-top: -2px;
-  border-left: 2px solid #fff; border-bottom: 2px solid #fff;
-  transform: rotate(-45deg);
-}
-.consensus-label { font-size: 12.5px; font-weight: 500; color: var(--text); }
 .plan-tag.free { background: #6f6e68; }
 .plan-tag {
   font-size: 9px;
@@ -1053,7 +1021,6 @@ textarea::placeholder { color: #b0b0a8; }
   margin-left: 5px;
   vertical-align: 1px;
 }
-.consensus-sub   { font-size: 11px; color: var(--muted); margin-top: 1px; }
 
 .material-item:last-child { border-bottom: none; }
 .material-item:hover { background: var(--bg); }
@@ -1666,14 +1633,6 @@ button .ico:only-child { margin-right: 0; }
         <div class="tip"><strong>Goal</strong>AI will list every item needed so you make one trip and return nothing.</div>
       </div>
 
-      <button class="consensus-toggle" id="consensusToggle" onclick="toggleConsensus()" type="button">
-        <div class="consensus-box" id="consensusBox"></div>
-        <div>
-          <div class="consensus-label">Council review <span class="plan-tag free" id="planTag">FREE</span></div>
-          <div class="consensus-sub" id="consensusSub">Two models build the list independently, then a third reviews both and resolves conflicts. Slower.</div>
-        </div>
-      </button>
-
       <div class="submit-row" style="margin-top:14px">
         <button class="submit-btn" id="submitBtn" onclick="submitJob()" disabled>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
@@ -1826,9 +1785,10 @@ const CONSENSUS_URL = '/api/council';     // Gemini + Groq answer, then a judge 
 const MODEL         = 'claude-sonnet-4-6';
 const MAX_TOKENS    = 1600;
 
-// Consensus is opt-in: it costs ~3x per run and is slower, so it's a
-// "double-check this" action rather than the default path. Pro plans only.
-let consensusMode = false;
+// The council always runs. Asking a user to opt into "better answers" was a
+// choice they had no basis to make — they cannot know in advance whether a job
+// needs cross-checking, and the safe default is the thorough one.
+const consensusMode = true;
 
 // Plan tier: 'free' (beta / everyone today) or 'pro' (paid).
 // The server re-derives this before charging real money — see resolveTier()
@@ -2935,10 +2895,13 @@ async function submitJob() {
     const measStr    = getMeasurementsStr();
     const fullPrompt = prompt + measStr;
 
+    // Council first; fall back to a single model if it can't be reached, so a
+    // council outage degrades the answer rather than removing it.
     let parsed;
-    if (consensusMode) {
+    try {
       parsed = await fetchConsensus(fullPrompt, currentStore);
-    } else {
+    } catch (councilErr) {
+      if (/limit|quota/i.test(councilErr.message)) throw councilErr;
       parsed = parseResponse(await fetchFromAPI(fullPrompt, currentStore));
     }
 
@@ -3208,12 +3171,6 @@ function resetToInput() {
 
 // Cross-check is open to everyone. Free plans get a smaller daily allowance
 // because each run costs about 3x a normal list.
-function toggleConsensus() {
-  consensusMode = !consensusMode;
-  document.getElementById('consensusToggle').classList.toggle('on', consensusMode);
-  document.getElementById('consensusBox').classList.toggle('on', consensusMode);
-}
-
 // ── Usage indicator ──
 // The server is the authority on what's left, but it only tells us after a
 // request. So we also count locally per day, show that immediately, and
@@ -3278,17 +3235,11 @@ function explainUsage() {
 // Reflect plan + remaining allowance in the UI.
 function applyPlanUI() {
   const pro = currentPlan === 'pro';
-  document.getElementById('planTag').textContent = pro ? 'PRO' : 'FREE';
-  document.getElementById('planTag').classList.toggle('free', !pro);
-
-  let sub = 'Two models build the list independently, then a third reviews both and resolves conflicts. Slower.';
-  if (consensusLeft != null) {
-    sub = consensusLeft > 0
-      ? `${consensusLeft} cross-check${consensusLeft === 1 ? '' : 's'} left${pro ? ' this hour' : ' today'}. Slower, but a judge checks the drafts against each other.`
-      : (pro ? 'Hourly limit reached — try again shortly.'
-             : 'Daily free cross-checks used up. Upgrade for 40 an hour.');
+  const tag = document.getElementById('planTag');
+  if (tag) {
+    setText(tag, pro ? 'PRO' : 'FREE');
+    tag.classList.toggle('free', !pro);
   }
-  setText(document.getElementById('consensusSub'), sub);
   renderUsage();
 }
 

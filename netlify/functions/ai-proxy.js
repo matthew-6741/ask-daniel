@@ -31,6 +31,13 @@ const LIMITS = {
 // deterrence; it is not a billing meter.
 const { getStore } = require('@netlify/blobs');
 
+function getRateLimitKey(event, tier) {
+  const ip =
+    (event.headers['x-forwarded-for'] || '').split(',')[0].trim() ||
+    event.headers['client-ip'] || 'unknown';
+  return `proxy:${tier}:${ip}`;
+}
+
 function limitStore() {
   return getStore({ name: 'rate-limits', consistency: 'strong' });
 }
