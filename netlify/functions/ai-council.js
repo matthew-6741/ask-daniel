@@ -656,8 +656,15 @@ function normalizeResponse(raw) {
   // an immediate hazard, evacuate and call the utility" — with no NOTES: marker
   // and no material rows. Discarding it as unparseable threw away the single
   // most important kind of answer this product gives.
-  if (!parsed.items.length && !parsed.notes && text.length > 40) {
+  // Only genuine prose falls back. Text that opens with "{" is JSON that failed
+  // to parse — almost always truncated by max_tokens — and showing a user the
+  // raw fragment as though it were advice is worse than reporting a failure.
+  const looksLikeBrokenJson = candidate.startsWith('{');
+  if (!parsed.items.length && !parsed.notes && text.length > 40 && !looksLikeBrokenJson) {
     return { notes: text.slice(0, 600), tools: [], items: [], format: 'prose' };
+  }
+  if (looksLikeBrokenJson && !parsed.items.length) {
+    return { notes: '', tools: [], items: [], format: 'truncated' };
   }
   return { ...parsed, format: 'text' };
 }

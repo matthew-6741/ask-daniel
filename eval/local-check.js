@@ -203,6 +203,16 @@ const TINY_JPEG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z
     ok('8c. unstructured safety prose is kept', /gas utility|evacuate/i.test(d.notes || ''), (d.notes || d.error || '').slice(0, 60));
   }
 
+  // 8d. truncated JSON must not be shown to the user as prose
+  {
+    const CUT = '{"notes": "Shut off the water first", "materials": [{"name": "P-Trap Kit", "spec": "1-1/2';
+    const m = makeFetch({ groq: () => groqBody(CUT), gemini: () => geminiBody(CUT) });
+    const { handler } = load('ai-council.js', m.fetch);
+    const res = await handler(evt({ tier: 'free', prompt: 'leaking p-trap', store: 'hd', trade: 'plumbing' }));
+    const d = JSON.parse(res.body);
+    ok('8d. truncated JSON is not surfaced as notes', !/^\s*\{/.test(d.notes || ''), (d.notes || d.error || '').slice(0, 50));
+  }
+
   // 9. prompt injection
   {
     const m = makeFetch({});
