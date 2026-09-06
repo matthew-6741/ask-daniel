@@ -1035,6 +1035,11 @@ textarea::placeholder { color: #b0b0a8; }
   font-size: 12px; color: #fff;
 }
 .consensus-toggle.on .consensus-box { background: var(--accent); border-color: var(--accent); }
+.consensus-box.on::after {
+  content: ''; width: 9px; height: 5px; margin-top: -2px;
+  border-left: 2px solid #fff; border-bottom: 2px solid #fff;
+  transform: rotate(-45deg);
+}
 .consensus-label { font-size: 12.5px; font-weight: 500; color: var(--text); }
 .plan-tag.free { background: #6f6e68; }
 .plan-tag {
@@ -1069,7 +1074,11 @@ textarea::placeholder { color: #b0b0a8; }
   transition: background .15s, border-color .15s;
 }
 .item-check.done { background: var(--green); border-color: var(--green); }
-.item-check.done::after { content: '✓'; color: white; font-size: 12px; font-weight: 700; }
+.item-check.done::after {
+  content: ''; width: 11px; height: 6px; margin-top: -3px;
+  border-left: 2px solid #fff; border-bottom: 2px solid #fff;
+  transform: rotate(-45deg);
+}
 
 .item-body { flex: 1; min-width: 0; }
 .material-name { font-size: 13px; font-weight: 600; color: var(--text); }
@@ -1195,6 +1204,9 @@ textarea::placeholder { color: #b0b0a8; }
 }
 .tip strong { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
 
+.ico { vertical-align: -2px; margin-right: 4px; flex-shrink: 0; }
+button .ico:only-child { margin-right: 0; }
+
 /* ── Usage indicator ── */
 .usage-pill {
   display: flex; align-items: center; gap: 7px;
@@ -1294,7 +1306,7 @@ textarea::placeholder { color: #b0b0a8; }
   text-transform: uppercase; color: var(--muted);
   margin: 4px 0 2px;
 }
-.ack-data li::before { content: '▸'; font-size: 11px; }
+.ack-data li::before { content: '\2022'; font-size: 11px; }
 .ack-check a { color: var(--accent); }
 .ack-check {
   display: flex; gap: 10px; align-items: flex-start;
@@ -1442,7 +1454,7 @@ textarea::placeholder { color: #b0b0a8; }
 <!-- ── First-run AI acknowledgement ── -->
 <div id="aiAckScreen" style="display:none">
   <div class="ack-card">
-    <div class="ack-icon">⚠️</div>
+    <div class="ack-icon"><svg class="ico" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></div>
     <h2 class="ack-title">Before you start</h2>
     <p class="ack-lede">Ask Daniel builds your material lists with artificial intelligence. That means it is fast and thorough, and it also means it can be wrong.</p>
 
@@ -1475,7 +1487,7 @@ textarea::placeholder { color: #b0b0a8; }
 
   <!-- Offline banner -->
   <div class="offline-banner" id="offlineBanner" style="display:none">
-    📡 You're offline — showing your last cached list
+    <svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 1l22 22"/><path d="M16.72 11.06A10.94 10.94 0 0119 12.55"/><path d="M5 12.55a10.94 10.94 0 015.17-2.39"/><path d="M10.71 5.05A16 16 0 0122.58 9"/><path d="M1.42 9a15.91 15.91 0 014.7-2.88"/><path d="M8.53 16.11a6 6 0 016.95 0"/><path d="M12 20h.01"/></svg> You're offline — showing your last cached list
   </div>
 
   <!-- Header -->
@@ -1494,7 +1506,7 @@ textarea::placeholder { color: #b0b0a8; }
         <span class="usage-count" id="usageCount">—</span>
       </button>
       <button class="history-trigger" id="historyTrigger" onclick="openHistory()">
-        📋 History
+        <svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 106 5.3L3 8"/><path d="M12 7v5l4 2"/></svg> History
       </button>
       <button class="loc-badge" id="locBtn" onclick="requestLocation()">
         <span class="loc-dot"></span>
@@ -1517,13 +1529,13 @@ textarea::placeholder { color: #b0b0a8; }
   <!-- History panel -->
   <div class="history-panel" id="historyPanel" style="display:none">
     <div class="history-header">
-      <div class="history-title">📋 Job History</div>
-      <button class="history-close" onclick="closeHistory()">✕ Close</button>
+      <div class="history-title"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg> Job History</div>
+      <button class="history-close" onclick="closeHistory()">&times; Close</button>
     </div>
     <div class="history-empty" id="historyEmpty">No jobs saved yet.</div>
     <div class="history-list" id="historyList"></div>
     <div class="history-footer">
-      <button class="history-clear-btn" onclick="clearHistory()">🗑️ Clear history</button>
+      <button class="history-clear-btn" onclick="clearHistory()"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg> Clear history</button>
     </div>
   </div>
 
@@ -1559,7 +1571,7 @@ textarea::placeholder { color: #b0b0a8; }
         </button>
       </div>
       <button class="compare-btn" onclick="startCompare()">
-        ⚖️ Compare Home Depot vs Lowe's side by side
+        <svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18"/><path d="M5 7h14"/><path d="M5 7l-3 6h6z"/><path d="M19 7l-3 6h6z"/></svg> Compare Home Depot vs Lowe's side by side
       </button>
     </div>
 
@@ -1569,11 +1581,11 @@ textarea::placeholder { color: #b0b0a8; }
     </div>
     <div class="card-body">
       <div class="trades" id="trades">
-        <button class="trade-chip active" data-trade="plumbing"  onclick="setTrade(this)">🔧 Plumbing</button>
-        <button class="trade-chip"        data-trade="hvac"      onclick="setTrade(this)">❄️ Basic HVAC</button>
-        <button class="trade-chip"        data-trade="carpentry" onclick="setTrade(this)">🪵 Carpentry</button>
-        <button class="trade-chip"        data-trade="auto"      onclick="setTrade(this)">🚗 Auto</button>
-        <button class="trade-chip"        data-trade="appliance" onclick="setTrade(this)">🧊 Appliance</button>
+        <button class="trade-chip active" data-trade="plumbing"  onclick="setTrade(this)">Plumbing</button>
+        <button class="trade-chip"        data-trade="hvac"      onclick="setTrade(this)">Basic HVAC</button>
+        <button class="trade-chip"        data-trade="carpentry" onclick="setTrade(this)">Carpentry</button>
+        <button class="trade-chip"        data-trade="auto"      onclick="setTrade(this)">Auto</button>
+        <button class="trade-chip"        data-trade="appliance" onclick="setTrade(this)">Appliance</button>
       </div>
     </div>
 
@@ -1621,8 +1633,8 @@ textarea::placeholder { color: #b0b0a8; }
     <div class="card-header" style="border-top:1px solid var(--border)">
       <div class="card-title">Describe the job — or show it</div>
       <div class="header-tools">
-        <button class="mic-btn" id="photoBtn" onclick="document.getElementById('photoInput').click()" title="Add a photo of the problem">📷</button>
-        <button class="mic-btn" id="micBtn" onclick="toggleVoice()" title="Tap to speak">🎤</button>
+        <button class="mic-btn" id="photoBtn" onclick="document.getElementById('photoInput').click()" title="Add a photo of the problem"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg></button>
+        <button class="mic-btn" id="micBtn" onclick="toggleVoice()" title="Tap to speak"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><path d="M12 19v4"/></svg></button>
       </div>
     </div>
     <div class="card-body">
@@ -1636,7 +1648,7 @@ textarea::placeholder { color: #b0b0a8; }
           <div class="photo-name" id="photoName">Photo attached</div>
           <div class="photo-hint">The AI will read this along with your description.</div>
         </div>
-        <button class="photo-remove" onclick="clearPhoto()" title="Remove photo">✕</button>
+        <button class="photo-remove" onclick="clearPhoto()" title="Remove photo">&times;</button>
       </div>
 
       <div class="prompt-wrap">
@@ -1680,10 +1692,10 @@ textarea::placeholder { color: #b0b0a8; }
     <div class="spinner"></div>
     <div class="loading-label" id="loadingLabel">Building your complete list…</div>
     <div class="loading-steps">
-      <div class="loading-step active" id="step1">📍 Reading your location</div>
-      <div class="loading-step"        id="step2">🔧 Analysing the job</div>
-      <div class="loading-step"        id="step3">🛒 Selecting exact materials</div>
-      <div class="loading-step"        id="step4">🗺️ Mapping aisle numbers</div>
+      <div class="loading-step active" id="step1"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0116 0z"/><circle cx="12" cy="10" r="3"/></svg> Reading your location</div>
+      <div class="loading-step"        id="step2">Analysing the job</div>
+      <div class="loading-step"        id="step3"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6"/></svg> Selecting exact materials</div>
+      <div class="loading-step"        id="step4"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4z"/><path d="M8 2v16"/><path d="M16 6v16"/></svg> Mapping aisle numbers</div>
     </div>
   </div>
 
@@ -1713,7 +1725,7 @@ textarea::placeholder { color: #b0b0a8; }
     </div>
 
     <div class="trip-banner">
-      <div class="trip-icon">✅</div>
+      <div class="trip-icon"><svg class="ico" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg></div>
       <div>
         <div class="trip-text">Complete one-trip list ready</div>
         <div class="trip-count" id="itemCountLine"></div>
@@ -1721,13 +1733,13 @@ textarea::placeholder { color: #b0b0a8; }
     </div>
 
     <div class="notes-block" id="notesBlock" style="display:none">
-      <div class="notes-label">⚠️ Trade note</div>
+      <div class="notes-label"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg> Trade note</div>
       <div id="notesText"></div>
     </div>
 
     <!-- Tool checklist -->
     <div class="tools-block" id="toolsBlock" style="display:none">
-      <div class="tools-header">🔧 Tools you'll need</div>
+      <div class="tools-header">Tools you'll need</div>
       <div class="tool-list" id="toolList"></div>
     </div>
 
@@ -1738,17 +1750,17 @@ textarea::placeholder { color: #b0b0a8; }
         Est. total: <strong id="totalEst">—</strong>
       </div>
       <div class="action-row">
-        <button class="icon-btn" onclick="window.print()">🖨️ Print</button>
-        <button class="icon-btn" onclick="copyList()">📋 Copy</button>
-        <button class="icon-btn" onclick="openDirections()">🧭 Directions</button>
-        <button class="icon-btn" onclick="resetToInput()">← New job</button>
+        <button class="icon-btn" onclick="window.print()"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><path d="M6 14h12v8H6z"/></svg> Print</button>
+        <button class="icon-btn" onclick="copyList()"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copy</button>
+        <button class="icon-btn" onclick="openDirections()"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M16.24 7.76l-2.12 6.36-6.36 2.12 2.12-6.36z"/></svg> Directions</button>
+        <button class="icon-btn" onclick="resetToInput()"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg> New job</button>
       </div>
     </div>
   </div>
 
   <footer class="site-footer">
     <p class="ai-note">
-      ⚠️ Material lists are AI-generated. Aisle numbers and prices are estimates —
+      Material lists are AI-generated. Aisle numbers and prices are estimates —
       confirm in store. Not a substitute for a licensed professional.
     </p>
     <nav class="footer-links">
@@ -1848,11 +1860,11 @@ const STORES = {
 
 // ── Quick Templates (per trade) ──
 const TRADE_ICONS = {
-  plumbing: '🔧',
-  hvac:     '❄️',
-  carpentry:'🪵',
-  auto:     '🚗',
-  appliance:'🧊',
+  plumbing: 'Plumbing',
+  hvac:     'HVAC',
+  carpentry:'Carpentry',
+  auto:     'Auto',
+  appliance:'Appliance',
 };
 
 // ── Init ──
@@ -2318,7 +2330,7 @@ function clearPhoto() {
 
 function showPhotoError(msg) {
   const errEl = document.getElementById('errorMsg');
-  setText(errEl, '⚠️ ' + msg);
+  setText(errEl, msg);
   errEl.classList.add('show');
   setTimeout(() => errEl.classList.remove('show'), 3200);
 }
@@ -2346,7 +2358,7 @@ function toggleVoice() {
   recognition.onstart = () => {
     voiceActive = true;
     btn.classList.add('recording');
-    btn.textContent = '⏹️';
+    btn.textContent = '<svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>️';
   };
 
   recognition.onresult = (e) => {
@@ -2363,7 +2375,7 @@ function toggleVoice() {
   recognition.onend = () => {
     voiceActive = false;
     btn.classList.remove('recording');
-    btn.textContent = '🎤';
+    btn.textContent = '<svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><path d="M12 19v4"/></svg>';
   };
 
   recognition.start();
@@ -2388,11 +2400,11 @@ async function requestLocation() {
         const city   = data.address?.city || data.address?.town || data.address?.village || 'your area';
         const region = data.address?.state || '';
         userLocation = { city, region, lat, lon };
-        label.textContent = `📍 ${city}${region ? ', ' + region : ''}`;
+        label.textContent = `${city}${region ? ', ' + region : ''}`;
         btn.classList.add('located');
       } catch {
         userLocation = { city: 'your area', region: '', lat, lon };
-        label.textContent = '📍 Located';
+        label.textContent = 'Located';
         btn.classList.add('located');
       }
     },
@@ -2584,8 +2596,8 @@ function renderResults({ notes, tools, items }, storeKey) {
       const verified = item.aisleVerified;
       src.className = 'agree-badge ' + (verified ? 'strong' : 'weak');
       setText(src, verified
-        ? '✓ aisle from verified inventory'
-        : '⚠ aisle unverified — confirm in store');
+        ? 'Aisle from verified inventory'
+        : 'Aisle unverified — confirm in store');
       body.appendChild(src);
     } else if (item.votes && item.totalProviders > 1) {
       // Legacy vote display (older /api/consensus responses)
@@ -2593,14 +2605,14 @@ function renderResults({ notes, tools, items }, storeKey) {
       const unanimous = item.votes === item.totalProviders;
       agree.className = 'agree-badge' + (unanimous ? ' strong' : ' weak');
       setText(agree, unanimous
-        ? `✓ all ${item.totalProviders} models agree`
+        ? `All ${item.totalProviders} models agree`
         : `${item.votes} of ${item.totalProviders} models — ${item.providers.join(', ')} only`);
       body.appendChild(agree);
     }
     if (item.aisleDisputed) {
       const disp = document.createElement('div');
       disp.className = 'agree-badge weak';
-      setText(disp, '⚠ models disagreed on the aisle — confirm in store');
+      setText(disp, 'Models disagreed on the aisle — confirm in store');
       body.appendChild(disp);
     }
 
@@ -2708,7 +2720,7 @@ async function runCompare(prompt) {
     document.getElementById('inputCard').style.display = 'block';
     compareMode = false;
     const errEl = document.getElementById('errorMsg');
-    setText(errEl, '⚠️ ' + (err.message || 'Something went wrong. Check your connection and try again.'));
+    setText(errEl, (err.message || 'Something went wrong. Check your connection and try again.'));
     errEl.classList.add('show');
   }
 }
@@ -2900,7 +2912,7 @@ async function submitJob() {
       return;
     }
     const errEl = document.getElementById('errorMsg');
-    setText(errEl, '⚠️ You\'re offline and no cached list exists. Connect to the internet and try again.');
+    setText(errEl, 'You\'re offline and no cached list exists. Connect to the internet and try again.');
     errEl.classList.add('show');
     return;
   }
@@ -2942,7 +2954,7 @@ async function submitJob() {
     document.getElementById('loadingCard').classList.remove('show');
     document.getElementById('inputCard').style.display = 'block';
     const errEl = document.getElementById('errorMsg');
-    setText(errEl, '⚠️ ' + (err.message || 'Something went wrong. Check your connection and try again.'));
+    setText(errEl, (err.message || 'Something went wrong. Check your connection and try again.'));
     errEl.classList.add('show');
   }
 }
@@ -3003,7 +3015,7 @@ async function refreshHistoryTrigger() {
   const count   = history.length;
   const btn     = document.getElementById('historyTrigger');
   btn.classList.toggle('has-items', count > 0);
-  btn.textContent = count > 0 ? `📋 History (${count})` : '📋 History';
+  btn.textContent = count > 0 ? `<svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 106 5.3L3 8"/><path d="M12 7v5l4 2"/></svg> History (${count})` : '<svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 106 5.3L3 8"/><path d="M12 7v5l4 2"/></svg> History';
 }
 
 async function openHistory() {
@@ -3033,7 +3045,7 @@ async function renderHistoryList() {
 
     const icon = document.createElement('div');
     icon.className = 'history-item-icon';
-    icon.textContent = TRADE_ICONS[entry.trade] || '🔩';
+    setText(icon, (TRADE_ICONS[entry.trade] || 'Job').slice(0, 2).toUpperCase());
 
     const body = document.createElement('div');
     body.className = 'history-item-body';
@@ -3148,7 +3160,7 @@ function reportWrongAisle(item, btn) {
     });
   }
 
-  btn.textContent = '✓ Thanks — noted';
+  btn.textContent = 'Thanks — noted';
   btn.classList.add('flagged');
   btn.disabled = true;
 }
@@ -3194,7 +3206,7 @@ function resetToInput() {
 function toggleConsensus() {
   consensusMode = !consensusMode;
   document.getElementById('consensusToggle').classList.toggle('on', consensusMode);
-  document.getElementById('consensusBox').textContent = consensusMode ? '✓' : '';
+  document.getElementById('consensusBox').classList.toggle('on', consensusMode);
 }
 
 // ── Usage indicator ──
@@ -3252,8 +3264,8 @@ function explainUsage() {
 
   const errEl = document.getElementById('errorMsg');
   setText(errEl, left === 0
-    ? `⚠️ You've used all ${max} council reviews ${per}. Regular lists still work — only the multi-model review is limited.`
-    : `ℹ️ ${left} of ${max} council reviews left ${per}. A council review asks several AI models independently, then has one judge the answers — so it costs more than a normal list.`);
+    ? `You've used all ${max} council reviews ${per}. Regular lists still work — only the multi-model review is limited.`
+    : `${left} of ${max} council reviews left ${per}. A council review asks several AI models independently, then has one judge the answers — so it costs more than a normal list.`);
   errEl.classList.add('show');
   setTimeout(() => errEl.classList.remove('show'), 6000);
 }

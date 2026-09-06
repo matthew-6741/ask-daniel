@@ -38,6 +38,7 @@ body {
 .crumbs a { color:var(--muted); text-decoration:none; }
 .crumbs a:hover { color:var(--accent); }
 .crumbs span { margin:0 5px; opacity:.6; }
+.tick::after { content:''; width:18px; height:10px; border-left:3px solid currentColor; border-bottom:3px solid currentColor; transform:rotate(-45deg); margin-top:-5px; }
 .tick {
   width:54px; height:54px; border-radius:50%; background:var(--green-bg);
   color:var(--green); display:flex; align-items:center; justify-content:center;
@@ -71,7 +72,7 @@ h1 { font-family:'Bebas Neue',sans-serif; font-size:34px; letter-spacing:.5px; l
       <a href="/">Home</a><span>›</span>Thank you
     </nav>
 
-    <div class="tick">✓</div>
+    <div class="tick" aria-hidden="true"></div>
     <h1>Thanks for reaching out</h1>
     <p class="lede">Thanks for reaching out. Ask Daniel is open to everyone — you can start building material lists right now.</p>
 
