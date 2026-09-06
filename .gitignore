@@ -1,3 +1,5 @@
 node_modules/
 .netlify/
 .DS_Store
+eval/results-*.csv
+eval/results-*.json
