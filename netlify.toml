@@ -44,3 +44,8 @@
   from = "/api/consensus"
   to = "/.netlify/functions/ai-consensus"
   status = 200
+
+[[redirects]]
+  from = "/api/council"
+  to = "/.netlify/functions/ai-council"
+  status = 200
