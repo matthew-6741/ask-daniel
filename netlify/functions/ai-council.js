@@ -20,11 +20,26 @@
 
 const MODELS = {
   gemini:     'gemini-2.5-flash',
-  groqText:   'llama-3.3-70b-versatile',
-  groqVision: 'llama-3.2-90b-vision-preview',
   openai:     'gpt-4o',
   xai:        'grok-2-vision-1212',
 };
+
+// Groq retires model names on its own schedule and access varies by key, so
+// try a list. Instruction-following models first; reasoning models (gpt-oss)
+// last, because they spend the token budget thinking and frequently return
+// empty content at small max_tokens.
+const GROQ_TEXT_MODELS = [
+  'llama-3.1-8b-instant',
+  'llama-3.3-70b-versatile',
+  'openai/gpt-oss-120b',
+  'openai/gpt-oss-20b',
+];
+const GROQ_VISION_MODELS = [
+  'meta-llama/llama-4-scout-17b-16e-instruct',
+  'llama-3.1-8b-instant',
+];
+
+const RETRYABLE = /does not exist|do not have access|decommissioned|not found|empty content/i;
 
 // ── Plan configuration ───────────────────────────────────────────────
 // Council review itself is available to EVERYONE. Plans differ only in how
@@ -152,6 +167,57 @@ function withTimeout(promise, ms, label) {
   ]);
 }
 
+// Resolve a provider's key.
+//
+// Environment variables get named by hand and rarely match exactly — a Groq key
+// has turned up as GROQ_API_KEY, KeyfromGroq and plain "key". Rather than fail
+// with "no provider configured" while a perfectly good key sits right there,
+// resolve in three passes:
+//   1. the canonical name
+//   2. any variable whose name mentions the provider
+//   3. any variable whose VALUE carries the provider's key prefix — the most
+//      reliable signal, since a value starting gsk_ is a Groq key whatever it
+//      was called
+function resolveKey(canonical, providerWord, valuePrefixes = []) {
+  // When the provider's keys have a known prefix, the value must carry it —
+  // however the variable was named. A variable called GEMINI_KEY holding a
+  // Google session token ("AQ.…") is not a Gemini key, and accepting it would
+  // put the agent in the council only to fail with 401 on every request.
+  const looksRight = v =>
+    !valuePrefixes.length || valuePrefixes.some(pre => String(v).startsWith(pre));
+
+  const direct = process.env[canonical];
+  if (direct && looksRight(direct)) return direct;
+
+  const entries = Object.entries(process.env).filter(([, v]) => v && looksRight(v));
+  const word = providerWord.toLowerCase();
+
+  const byName = entries.find(([k]) => k.toLowerCase().includes(word));
+  if (byName) return byName[1];
+
+  // No name hint, but the value's prefix identifies the provider unambiguously.
+  if (valuePrefixes.length && entries.length) return entries[0][1];
+
+  return null;
+}
+
+const KEY_HINTS = {
+  GEMINI_API_KEY:      ['gemini', ['AIza']],
+  GROQ_API_KEY:        ['groq',   ['gsk_']],
+  ANTHROPIC_API_KEY:   ['anthropic', ['sk-ant-']],
+  OPENAI_API_KEY:      ['openai', ['sk-proj-']],
+  XAI_API_KEY:         ['xai',    ['xai-']],
+  CEREBRAS_API_KEY:    ['cerebras', ['csk-']],
+  MISTRAL_API_KEY:     ['mistral', []],
+  OPENROUTER_API_KEY:  ['openrouter', ['sk-or-']],
+  GITHUB_MODELS_TOKEN: ['github', ['ghp_', 'github_pat_']],
+};
+
+function keyFor(envName) {
+  const [word, prefixes] = KEY_HINTS[envName] || [envName.toLowerCase(), []];
+  return resolveKey(envName, word, prefixes);
+}
+
 // ── Agent registry ───────────────────────────────────────────────────
 //
 // ADDING A NEW AGENT: append one entry below. Nothing else needs to change —
@@ -180,7 +246,7 @@ function openAICompatible({ url, keyEnv, model, visionModel }) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env[keyEnv]}`,
+        'Authorization': `Bearer ${keyFor(keyEnv)}`,
       },
       body: JSON.stringify({
         model: image && visionModel ? visionModel : model,
@@ -195,10 +261,30 @@ function openAICompatible({ url, keyEnv, model, visionModel }) {
   };
 }
 
+async function callGroq(system, prompt, maxTokens, image) {
+  const candidates = image ? GROQ_VISION_MODELS : GROQ_TEXT_MODELS;
+  let lastErr = null;
+  for (const model of candidates) {
+    const once = openAICompatible({
+      url: 'https://api.groq.com/openai/v1/chat/completions',
+      keyEnv: 'GROQ_API_KEY', model,
+    });
+    try {
+      const out = await once(system, prompt, maxTokens, image);
+      if (out && out.trim()) return out;
+      lastErr = new Error(`${model} returned empty content`);
+    } catch (e) {
+      lastErr = e;
+      if (!RETRYABLE.test(e.message)) throw e;
+    }
+  }
+  throw lastErr || new Error('No usable Groq model');
+}
+
 async function callGemini(system, prompt, maxTokens, image) {
   const parts = [{ text: prompt }];
   if (image) parts.push({ inlineData: { mimeType: image.mediaType, data: image.base64 } });
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODELS.gemini}:generateContent?key=${process.env.GEMINI_API_KEY}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODELS.gemini}:generateContent?key=${keyFor('GEMINI_API_KEY')}`;
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -222,7 +308,7 @@ async function callClaude(system, prompt, maxTokens, image) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': process.env.ANTHROPIC_API_KEY,
+      'x-api-key': keyFor('ANTHROPIC_API_KEY'),
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
@@ -242,9 +328,7 @@ const AGENTS = [
     roles: ['opinion', 'judge'], call: callGemini },
 
   { id: 'groq', name: 'Groq', env: 'GROQ_API_KEY', cost: 'free', vision: true,
-    roles: ['opinion', 'judge'],
-    call: openAICompatible({ url: 'https://api.groq.com/openai/v1/chat/completions',
-      keyEnv: 'GROQ_API_KEY', model: MODELS.groqText, visionModel: MODELS.groqVision }) },
+    roles: ['opinion', 'judge'], call: callGroq },
 
   { id: 'cerebras', name: 'Cerebras', env: 'CEREBRAS_API_KEY', cost: 'free', vision: false,
     roles: ['opinion'],
@@ -287,7 +371,7 @@ function eligibleAgents(tier, { role = 'opinion', hasImage = false } = {}) {
   const plan = planFor(tier);
   const paidOk = plan.allowPaid && paidEnabled();
   return AGENTS.filter(a =>
-    process.env[a.env] &&
+    keyFor(a.env) &&
     (a.cost === 'free' || paidOk) &&
     a.roles.includes(role) &&
     (!hasImage || a.vision)

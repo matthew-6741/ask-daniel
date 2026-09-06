@@ -75,11 +75,73 @@ function validateImage(image) {
   return { base64, mediaType };
 }
 
+// Resolve a provider's key tolerantly — see ai-council.js for the reasoning.
+// Variables get hand-named (KeyfromGroq, "key"), and a value's prefix is a more
+// reliable signal of which provider it belongs to than the name it was given.
+function resolveKey(canonical, providerWord, valuePrefixes = []) {
+  const looksRight = v =>
+    !valuePrefixes.length || valuePrefixes.some(pre => String(v).startsWith(pre));
+
+  const direct = process.env[canonical];
+  if (direct && looksRight(direct)) return direct;
+
+  const entries = Object.entries(process.env).filter(([, v]) => v && looksRight(v));
+  const byName = entries.find(([k]) => k.toLowerCase().includes(providerWord.toLowerCase()));
+  if (byName) return byName[1];
+
+  if (valuePrefixes.length && entries.length) return entries[0][1];
+  return null;
+}
+
+const KEY_HINTS = {
+  GROQ_API_KEY:      ['groq',      ['gsk_']],
+  GEMINI_API_KEY:    ['gemini',    ['AIza']],
+  ANTHROPIC_API_KEY: ['anthropic', ['sk-ant-']],
+};
+
+function keyFor(envName) {
+  const [word, prefixes] = KEY_HINTS[envName] || [envName.toLowerCase(), []];
+  return resolveKey(envName, word, prefixes);
+}
+
 // ── Provider calls. Each returns raw text in the NOTES/TOOLS/MATERIALS format.
 
+// Groq retires model names on its own schedule, and which ones an account can
+// reach varies. Try a list rather than pinning one — a dead name should cost a
+// retry, not the whole request.
+// Groq's current production line-up (console.groq.com/docs/models).
+// Smallest/most widely available first, so a restricted key still gets served.
+const GROQ_TEXT_MODELS = [
+  'llama-3.1-8b-instant',
+  'llama-3.3-70b-versatile',
+  // Reasoning models last: they spend the token budget thinking and often
+  // return empty content at small max_tokens.
+  'openai/gpt-oss-120b',
+  'openai/gpt-oss-20b',
+];
+// Groq lists no vision model in production right now, so photo jobs fall back
+// to describing the text prompt only. Gemini handles photos when configured.
+const GROQ_VISION_MODELS = [
+  'meta-llama/llama-4-scout-17b-16e-instruct',
+  'llama-3.1-8b-instant',
+];
+
 async function callGroq(system, prompt, maxTokens, image) {
-  // Groq's text model can't see; its vision model can. Swap when a photo is sent.
-  const model = image ? 'llama-3.2-90b-vision-preview' : 'llama-3.3-70b-versatile';
+  const candidates = image ? GROQ_VISION_MODELS : GROQ_TEXT_MODELS;
+  let lastErr = null;
+  for (const model of candidates) {
+    try {
+      return await groqOnce(model, system, prompt, maxTokens, image);
+    } catch (e) {
+      lastErr = e;
+      // Only a missing/forbidden model is worth retrying; anything else is real.
+      if (!/does not exist|do not have access|decommissioned|not found|empty content/i.test(e.message)) throw e;
+    }
+  }
+  throw lastErr || new Error('No usable Groq model');
+}
+
+async function groqOnce(model, system, prompt, maxTokens, image) {
   const userContent = image
     ? [
         { type: 'text', text: prompt },
@@ -91,7 +153,7 @@ async function callGroq(system, prompt, maxTokens, image) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+      'Authorization': `Bearer ${keyFor('GROQ_API_KEY')}`,
     },
     body: JSON.stringify({
       model,
@@ -105,14 +167,27 @@ async function callGroq(system, prompt, maxTokens, image) {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error?.message || `Groq ${res.status}`);
-  return data.choices?.[0]?.message?.content || '';
+
+  const msg = data.choices?.[0]?.message || {};
+  // Reasoning models put chain-of-thought in `reasoning` and the answer in
+  // `content`. An empty `content` means it never reached an answer — the
+  // scratchpad is not a substitute, so treat it as this model failing and let
+  // the caller try the next one.
+  const text = msg.content || '';
+  if (!text.trim()) {
+    throw new Error(`${model} does not have access to a usable completion (empty content, finish: ${data.choices?.[0]?.finish_reason || '?'})`);
+  }
+  lastGroqModel = model;
+  return text;
 }
+
+let lastGroqModel = null;
 
 async function callGemini(system, prompt, maxTokens, image) {
   const parts = [{ text: prompt }];
   if (image) parts.push({ inlineData: { mimeType: image.mediaType, data: image.base64 } });
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${keyFor('GEMINI_API_KEY')}`;
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -139,7 +214,7 @@ async function callClaude(system, prompt, maxTokens, image) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': process.env.ANTHROPIC_API_KEY,
+      'x-api-key': keyFor('ANTHROPIC_API_KEY'),
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
@@ -165,7 +240,7 @@ function pickProvider(tier, hasImage) {
 
   const freeChain = hasImage ? [gemini, groq] : [groq, gemini];
   const chain = tier === 'pro' ? [claude, ...freeChain] : freeChain;
-  return chain.find(p => process.env[p.env]) || null;
+  return chain.find(p => keyFor(p.env)) || null;
 }
 
 // Resolve the caller's plan.
@@ -244,7 +319,7 @@ exports.handler = async (event) => {
         'X-RateLimit-Remaining': String(rl.remaining),
       },
       // Normalized shape so the client doesn't care which provider answered.
-      body: JSON.stringify({ text, provider: provider.name, tier, remaining: rl.remaining }),
+      body: JSON.stringify({ text, provider: provider.name, model: lastGroqModel || undefined, tier, remaining: rl.remaining }),
     };
   } catch (err) {
     return {
