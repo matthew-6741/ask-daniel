@@ -759,32 +759,6 @@ body {
   color: var(--accent);
 }
 
-/* ── Quick templates ── */
-.template-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.tpl-chip {
-  padding: 11px 14px;
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  background: var(--bg);
-  font-size: 12px;
-  color: var(--muted);
-  cursor: pointer;
-  transition: all .15s;
-  max-width: 100%;
-  text-align: left;
-  font-family: 'DM Sans', sans-serif;
-  white-space: nowrap;
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.tpl-chip:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-bg); }
 
 /* ── Measurements (qty calc) ── */
 .section-toggle {
@@ -1223,6 +1197,35 @@ textarea::placeholder { color: #b0b0a8; }
 }
 .tip strong { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
 
+/* ── Usage indicator ── */
+.usage-pill {
+  display: flex; align-items: center; gap: 7px;
+  border: 1px solid var(--border); border-radius: 99px;
+  background: var(--surface); padding: 5px 12px 5px 9px;
+  font-family: 'DM Sans', sans-serif; font-size: 12px;
+  color: var(--muted); cursor: pointer; min-height: 34px;
+  transition: border-color .15s, color .15s;
+}
+.usage-pill:hover { border-color: var(--accent); color: var(--accent); }
+
+/* The ring empties as the allowance is used. --pct is set from JS. */
+.usage-ring {
+  width: 15px; height: 15px; border-radius: 50%; flex-shrink: 0;
+  background: conic-gradient(var(--ring-color, var(--green)) calc(var(--pct, 100) * 1%),
+                             var(--border) 0);
+  position: relative;
+}
+.usage-ring::after {
+  content: ''; position: absolute; inset: 3.5px;
+  border-radius: 50%; background: var(--surface);
+}
+.usage-count { font-weight: 500; font-variant-numeric: tabular-nums; }
+.usage-pill.low   { border-color: #e8c07d; color: var(--orange); }
+.usage-pill.spent { border-color: #eab5ac; color: var(--red); }
+
+@media (max-width: 480px) { .usage-pill { padding: 5px 10px 5px 8px; } }
+@media print { .usage-pill { display: none; } }
+
 .item-flag {
   margin-top: 6px;
   padding: 3px 9px;
@@ -1487,6 +1490,11 @@ textarea::placeholder { color: #b0b0a8; }
       </div>
     </div>
     <div class="header-right">
+      <button class="usage-pill" id="usagePill" onclick="explainUsage()"
+              title="Council reviews left" aria-label="Council reviews remaining">
+        <span class="usage-ring" id="usageRing"></span>
+        <span class="usage-count" id="usageCount">—</span>
+      </button>
       <button class="history-trigger" id="historyTrigger" onclick="openHistory()">
         📋 History
       </button>
@@ -1569,14 +1577,6 @@ textarea::placeholder { color: #b0b0a8; }
         <button class="trade-chip"        data-trade="auto"      onclick="setTrade(this)">🚗 Auto</button>
         <button class="trade-chip"        data-trade="appliance" onclick="setTrade(this)">🧊 Appliance</button>
       </div>
-    </div>
-
-    <!-- Quick templates -->
-    <div class="card-header" style="border-top:1px solid var(--border)">
-      <div class="card-title">Quick templates</div>
-    </div>
-    <div class="card-body" style="padding-bottom:12px">
-      <div class="template-chips" id="templateChips"></div>
     </div>
 
     <!-- Measurements (qty calculator) -->
@@ -1849,44 +1849,6 @@ const STORES = {
 };
 
 // ── Quick Templates (per trade) ──
-const TEMPLATES = {
-  plumbing: [
-    'Replace P-trap under kitchen sink, 1½" PVC',
-    'Install new toilet, standard 12" rough-in',
-    'Repair dripping bathroom faucet',
-    'Replace 40-gallon gas water heater',
-    'Install dishwasher supply and drain lines',
-  ],
-  hvac: [
-    'Replace AC capacitor on central air unit',
-    'Install programmable thermostat',
-    'Service gas furnace, forced air system',
-    'Replace 6-inch flex duct run, 20 feet',
-    'Add return air vent to existing duct',
-  ],
-  carpentry: [
-    'Frame non-load-bearing interior wall, 8ft ceiling',
-    'Hang and tape drywall in a 12×12 bedroom',
-    'Patch 12×12 inch drywall hole',
-    'Install pre-hung interior door',
-    'Build 10×12 pressure-treated deck, ground level',
-  ],
-  appliance: [
-    'Refrigerator not cooling, coils look dusty',
-    'Ice maker stopped making ice',
-    'Washer not draining, standing water in drum',
-    'Dryer runs but clothes stay damp',
-    'Dishwasher leaking from the door',
-  ],
-  auto: [
-    'Full oil change, 5W-30 synthetic, 2018 Honda Civic',
-    'Replace front brake pads and rotors',
-    'Replace car battery, group size 24F',
-    'Tune-up: spark plugs, air filter, cabin filter',
-    'Replace serpentine belt and coolant flush',
-  ],
-};
-
 const TRADE_ICONS = {
   plumbing: '🔧',
   hvac:     '❄️',
@@ -1897,7 +1859,6 @@ const TRADE_ICONS = {
 
 // ── Init ──
 async function init() {
-  updateTemplates();
   if (!navigator.onLine) showOfflineBanner(true);
   window.addEventListener('online',  () => showOfflineBanner(false));
   window.addEventListener('offline', () => showOfflineBanner(true));
@@ -1948,6 +1909,7 @@ function revealShell() {
   document.body.style.overflow = '';
   document.querySelector('.shell').style.display = 'flex';
   applyPlanUI();
+  renderUsage();
 }
 
 function onAckChange() {
@@ -2247,29 +2209,6 @@ function setTrade(btn) {
   document.querySelectorAll('.trade-chip').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   currentTrade = btn.dataset.trade;
-  updateTemplates();
-}
-
-// ── Quick Templates ──
-function updateTemplates() {
-  const container = document.getElementById('templateChips');
-  container.innerHTML = '';
-  const list = TEMPLATES[currentTrade] || [];
-  list.forEach(text => {
-    const chip = document.createElement('button');
-    chip.className = 'tpl-chip';
-    chip.textContent = text;
-    chip.title = text;
-    chip.onclick = () => fillTemplate(text);
-    container.appendChild(chip);
-  });
-}
-
-function fillTemplate(text) {
-  const ta = document.getElementById('prompt');
-  ta.value = text;
-  onInput();
-  ta.focus();
 }
 
 // ── Measurements (qty calculator) ──
@@ -2869,6 +2808,7 @@ async function fetchConsensus(prompt, storeKey) {
   const inventory = formatProductsForPrompt(matched);
   const system    = buildSystemPrompt(storeKey, inventory);
 
+  bumpUsage();
   const response = await fetch(CONSENSUS_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -3242,6 +3182,67 @@ function toggleConsensus() {
   document.getElementById('consensusBox').textContent = consensusMode ? '✓' : '';
 }
 
+// ── Usage indicator ──
+// The server is the authority on what's left, but it only tells us after a
+// request. So we also count locally per day, show that immediately, and
+// overwrite it with the server's number whenever one arrives.
+const USAGE_KEY = 'diagnostech_usage';
+const PLAN_ALLOWANCE = { free: 5, pro: 40 };
+
+function todayKey() { return new Date().toISOString().slice(0, 10); }
+
+function readUsage() {
+  try {
+    const u = JSON.parse(localStorage.getItem(USAGE_KEY) || '{}');
+    return u.day === todayKey() ? u : { day: todayKey(), used: 0 };
+  } catch { return { day: todayKey(), used: 0 }; }
+}
+
+function bumpUsage() {
+  const u = readUsage();
+  u.used += 1;
+  try { localStorage.setItem(USAGE_KEY, JSON.stringify(u)); } catch {}
+  renderUsage();
+}
+
+function renderUsage() {
+  const pill  = document.getElementById('usagePill');
+  const ring  = document.getElementById('usageRing');
+  const count = document.getElementById('usageCount');
+  if (!pill) return;
+
+  const max  = PLAN_ALLOWANCE[currentPlan] || PLAN_ALLOWANCE.free;
+  // Prefer the server's figure; fall back to the local tally.
+  const left = consensusLeft != null
+    ? consensusLeft
+    : Math.max(0, max - readUsage().used);
+
+  const pct = max > 0 ? Math.round((left / max) * 100) : 0;
+  ring.style.setProperty('--pct', pct);
+  ring.style.setProperty('--ring-color',
+    left === 0 ? 'var(--red)' : left <= 2 ? 'var(--orange)' : 'var(--green)');
+
+  setText(count, String(left));
+  pill.classList.toggle('low', left > 0 && left <= 2);
+  pill.classList.toggle('spent', left === 0);
+  pill.title = left === 0
+    ? `No council reviews left ${currentPlan === 'pro' ? 'this hour' : 'today'}`
+    : `${left} of ${max} council reviews left ${currentPlan === 'pro' ? 'this hour' : 'today'}`;
+}
+
+function explainUsage() {
+  const max  = PLAN_ALLOWANCE[currentPlan] || PLAN_ALLOWANCE.free;
+  const left = consensusLeft != null ? consensusLeft : Math.max(0, max - readUsage().used);
+  const per  = currentPlan === 'pro' ? 'per hour' : 'per day';
+
+  const errEl = document.getElementById('errorMsg');
+  setText(errEl, left === 0
+    ? `⚠️ You've used all ${max} council reviews ${per}. Regular lists still work — only the multi-model review is limited.`
+    : `ℹ️ ${left} of ${max} council reviews left ${per}. A council review asks several AI models independently, then has one judge the answers — so it costs more than a normal list.`);
+  errEl.classList.add('show');
+  setTimeout(() => errEl.classList.remove('show'), 6000);
+}
+
 // Reflect plan + remaining allowance in the UI.
 function applyPlanUI() {
   const pro = currentPlan === 'pro';
@@ -3256,6 +3257,7 @@ function applyPlanUI() {
              : 'Daily free cross-checks used up. Upgrade for 40 an hour.');
   }
   setText(document.getElementById('consensusSub'), sub);
+  renderUsage();
 }
 
 function clearAll() {
