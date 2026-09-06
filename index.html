@@ -2726,6 +2726,23 @@ function switchCompareTab(storeKey) {
 // Read a JSON response defensively. When the serverless functions aren't
 // deployed the platform returns its HTML 404 page, and response.json() throws
 // "Unexpected token '<'" — which is true, useless, and alarming to a user.
+// fetch() rejects outright when the connection never lands — server down,
+// offline, DNS failure — and the browser's message for that is the bare
+// "Failed to fetch", which tells a user nothing. Translate it here.
+async function fetchOrExplain(url, options, label) {
+  try {
+    return await fetch(url, options);
+  } catch (err) {
+    if (!navigator.onLine) {
+      throw new Error("You're offline. Reconnect and try again.");
+    }
+    if (USE_LOCAL) {
+      throw new Error(`Can't reach the local model at ${LOCAL_URL.replace(/\/v1.*/, '')}. Start Ollama (\`ollama serve\`), or use the deployed site.`);
+    }
+    throw new Error(`Couldn't reach the ${label} service. Check your connection and try again.`);
+  }
+}
+
 async function readJsonOrExplain(response, label) {
   const ct = response.headers.get('content-type') || '';
   if (!ct.includes('application/json')) {
@@ -2757,7 +2774,7 @@ async function fetchFromAPI(prompt, storeKey) {
         ]
       : prompt;
 
-    const response = await fetch(LOCAL_URL, {
+    const response = await fetchOrExplain(LOCAL_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -2777,7 +2794,7 @@ async function fetchFromAPI(prompt, storeKey) {
     // ── Netlify proxy (API keys never leave the server) ──
     // The proxy picks the model from the tier: free -> Groq/Gemini free tier,
     // pro -> Claude. It returns a normalized { text } regardless of provider.
-    const response = await fetch(PROXY_URL, {
+    const response = await fetchOrExplain(PROXY_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -2809,7 +2826,7 @@ async function fetchConsensus(prompt, storeKey) {
   const system    = buildSystemPrompt(storeKey, inventory);
 
   bumpUsage();
-  const response = await fetch(CONSENSUS_URL, {
+  const response = await fetchOrExplain(CONSENSUS_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
