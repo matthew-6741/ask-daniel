@@ -1223,22 +1223,6 @@ button .ico:only-child { margin-right: 0; }
 
 /* ── Photo attachment ── */
 .header-tools { display: flex; gap: 7px; }
-.video-strip {
-  background: var(--bg); border: 1px solid var(--border);
-  border-radius: 10px; padding: 10px; margin-bottom: 12px;
-}
-.video-label { display: block; font-size: 12.5px; color: var(--muted); margin-bottom: 8px; }
-.video-row { display: flex; align-items: center; gap: 8px; }
-.video-row input {
-  flex: 1; min-width: 0; background: var(--surface);
-  border: 1px solid var(--border); border-radius: 8px;
-  padding: 9px 11px; color: var(--text); font-size: 14px; font-family: inherit;
-}
-.video-row input:focus { outline: none; border-color: var(--accent); }
-.video-hint { font-size: 11px; color: var(--muted); margin-top: 6px; }
-.video-hint.bad { color: var(--red); }
-#videoBtn.on { border-color: var(--accent); color: var(--accent); }
-
 .photo-strip {
   display: flex; align-items: center; gap: 12px;
   background: var(--bg); border: 1px solid var(--border);
@@ -1617,7 +1601,6 @@ button .ico:only-child { margin-right: 0; }
       <div class="card-title">Describe the job — or show it</div>
       <div class="header-tools">
         <button class="mic-btn" id="photoBtn" onclick="document.getElementById('photoInput').click()" title="Add a photo of the problem"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg></button>
-        <button class="mic-btn" id="videoBtn" onclick="toggleVideoField()" title="Link a repair video you're following"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="M10 9l5 3-5 3z"/></svg></button>
         <button class="mic-btn" id="micBtn" onclick="toggleVoice()" title="Tap to speak"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><path d="M12 19v4"/></svg></button>
       </div>
     </div>
@@ -1636,16 +1619,6 @@ button .ico:only-child { margin-right: 0; }
       </div>
 
 
-      <div class="video-strip" id="videoStrip" style="display:none">
-        <label class="video-label" for="videoUrl">Following a repair video? Paste the link and it gets watched too.</label>
-        <div class="video-row">
-          <input type="url" id="videoUrl" inputmode="url" autocomplete="off" spellcheck="false"
-                 placeholder="https://www.youtube.com/watch?v=..."
-                 maxlength="300" oninput="onVideoInput()">
-          <button class="photo-remove" onclick="clearVideo()" title="Remove video">&times;</button>
-        </div>
-        <div class="video-hint" id="videoHint">Public YouTube links only. Adds a few seconds.</div>
-      </div>
 
       <div class="prompt-wrap">
         <textarea id="prompt"
@@ -2310,67 +2283,6 @@ function resizePhoto(file) {
   });
 }
 
-/* ── Repair video ────────────────────────────────────────────────────────
-   The user pastes a link to the video they are following; Gemini watches it
-   and the whole council reads what it saw. Validation here mirrors the server
-   so a typo is caught before it costs a request — the server still
-   re-validates, because nothing arriving from a browser is trusted. */
-let jobVideo = null;
-
-function toggleVideoField() {
-  const strip = document.getElementById('videoStrip');
-  const open  = strip.style.display !== 'none';
-  strip.style.display = open ? 'none' : 'block';
-  document.getElementById('videoBtn').classList.toggle('on', !open);
-  if (open) clearVideo();
-  else document.getElementById('videoUrl').focus();
-}
-
-const YT_CLIENT_PATTERNS = [
-  /^https?:\/\/(?:www\.|m\.)?youtube\.com\/watch\?(?:[^#]*&)?v=([A-Za-z0-9_-]{11})(?:[&#]|$)/,
-  /^https?:\/\/(?:www\.)?youtu\.be\/([A-Za-z0-9_-]{11})(?:[?#]|$)/,
-  /^https?:\/\/(?:www\.)?youtube\.com\/shorts\/([A-Za-z0-9_-]{11})(?:[?#]|$)/,
-  /^https?:\/\/(?:www\.)?youtube\.com\/embed\/([A-Za-z0-9_-]{11})(?:[?#]|$)/,
-];
-
-function youTubeId(raw) {
-  const url = String(raw || '').trim();
-  if (!url || url.length > 300) return null;
-  for (const re of YT_CLIENT_PATTERNS) { const m = url.match(re); if (m) return m[1]; }
-  return null;
-}
-
-const VIDEO_HINT_DEFAULT = 'Public YouTube links only. Adds a few seconds.';
-
-function onVideoInput() {
-  const raw  = document.getElementById('videoUrl').value.trim();
-  const hint = document.getElementById('videoHint');
-  if (!raw) {
-    jobVideo = null;
-    hint.className = 'video-hint';
-    hint.textContent = VIDEO_HINT_DEFAULT;
-    return;
-  }
-  const id = youTubeId(raw);
-  if (id) {
-    jobVideo = 'https://www.youtube.com/watch?v=' + id;
-    hint.className = 'video-hint';
-    hint.textContent = 'Video will be watched and used for the list.';
-  } else {
-    jobVideo = null;
-    hint.className = 'video-hint bad';
-    hint.textContent = 'That is not a YouTube video link.';
-  }
-}
-
-function clearVideo() {
-  jobVideo = null;
-  const f = document.getElementById('videoUrl');
-  if (f) f.value = '';
-  const hint = document.getElementById('videoHint');
-  if (hint) { hint.className = 'video-hint'; hint.textContent = VIDEO_HINT_DEFAULT; }
-}
-
 function clearPhoto() {
   jobPhoto = null;
   document.getElementById('photoStrip').style.display = 'none';
@@ -2863,7 +2775,6 @@ async function fetchFromAPI(prompt, storeKey) {
         system,
         prompt,
         image: jobPhoto ? { base64: jobPhoto.base64, mediaType: jobPhoto.mediaType } : null,
-        videoUrl: jobVideo || null,
       }),
     });
     const data = await readJsonOrExplain(response, 'AI');
@@ -2900,7 +2811,6 @@ async function fetchConsensus(prompt, storeKey) {
       region: userLocation ? userLocation.region : undefined,
       max_tokens: MAX_TOKENS,
       image: jobPhoto ? { base64: jobPhoto.base64, mediaType: jobPhoto.mediaType } : null,
-      videoUrl: jobVideo || null,
       // Matched inventory, so the server can prefer real aisles over guesses
       inventory: matched.map(p => ({ name: p.name, spec: p.spec, aisle: `Aisle ${p.aisle}`, price: p.price })),
       verifiedAisles: matched.map(p => ({ name: p.name, aisle: `Aisle ${p.aisle}` })),
@@ -2992,18 +2902,9 @@ async function submitJob() {
     let parsed;
     try {
       parsed = await fetchConsensus(fullPrompt, currentStore);
-      // Say plainly when a linked video was not used. Silently ignoring it
-      // would leave the user thinking the list came from the video.
-      if (parsed.videoNote) {
-        parsed.notes = parsed.notes ? `${parsed.videoNote} ${parsed.notes}` : parsed.videoNote;
-      }
     } catch (councilErr) {
       if (/limit|quota/i.test(councilErr.message)) throw councilErr;
       parsed = parseResponse(await fetchFromAPI(fullPrompt, currentStore));
-      if (jobVideo) {
-        const msg = 'The council was unavailable, so your video was not watched for this list.';
-        parsed.notes = parsed.notes ? `${msg} ${parsed.notes}` : msg;
-      }
     }
 
     // An empty list is the correct answer to "I smell gas" — the safety notice
@@ -3353,7 +3254,6 @@ function clearAll() {
   ta.value = '';
   ta.style.height = 'auto';
   clearPhoto();
-  clearVideo();
   document.getElementById('charCount').textContent = '0 / 800';
   document.getElementById('submitBtn').disabled    = true;
   document.getElementById('errorMsg').classList.remove('show');
