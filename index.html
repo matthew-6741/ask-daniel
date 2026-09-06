@@ -1567,6 +1567,7 @@ textarea::placeholder { color: #b0b0a8; }
         <button class="trade-chip"        data-trade="hvac"      onclick="setTrade(this)">❄️ Basic HVAC</button>
         <button class="trade-chip"        data-trade="carpentry" onclick="setTrade(this)">🪵 Carpentry</button>
         <button class="trade-chip"        data-trade="auto"      onclick="setTrade(this)">🚗 Auto</button>
+        <button class="trade-chip"        data-trade="appliance" onclick="setTrade(this)">🧊 Appliance</button>
       </div>
     </div>
 
@@ -1870,6 +1871,13 @@ const TEMPLATES = {
     'Install pre-hung interior door',
     'Build 10×12 pressure-treated deck, ground level',
   ],
+  appliance: [
+    'Refrigerator not cooling, coils look dusty',
+    'Ice maker stopped making ice',
+    'Washer not draining, standing water in drum',
+    'Dryer runs but clothes stay damp',
+    'Dishwasher leaking from the door',
+  ],
   auto: [
     'Full oil change, 5W-30 synthetic, 2018 Honda Civic',
     'Replace front brake pads and rotors',
@@ -1884,6 +1892,7 @@ const TRADE_ICONS = {
   hvac:     '❄️',
   carpentry:'🪵',
   auto:     '🚗',
+  appliance:'🧊',
 };
 
 // ── Init ──
@@ -2106,7 +2115,7 @@ function friendlyAuthError(code) {
 // Bump PRODUCT_DB_VERSION whenever products.json changes. Without the query
 // param the browser keeps serving a cached copy, so users would stay on an old
 // product database indefinitely after a deploy.
-const PRODUCT_DB_VERSION = '2026-08-1';
+const PRODUCT_DB_VERSION = '2026-09-1';
 
 async function loadProducts() {
   try {

@@ -2,7 +2,7 @@
   "meta": {
     "store": "Home Depot",
     "note": "Edit aisle/bay numbers to match your local store. Prices are approximate.",
-    "updated": "2026-08"
+    "updated": "2026-09"
   },
   "plumbing": [
     {
@@ -3184,6 +3184,347 @@
         "abrasive",
         "grit",
         "sand"
+      ]
+    }
+  ],
+  "appliance": [
+    {
+      "name": "Refrigerator Water Inlet Valve",
+      "spec": "Dual coil, 1/4 in. compression",
+      "aisle": "43",
+      "bay": "2",
+      "price": 38.97,
+      "tags": [
+        "water inlet valve",
+        "fridge valve",
+        "refrigerator",
+        "ice maker",
+        "water dispenser",
+        "not dispensing"
+      ]
+    },
+    {
+      "name": "Refrigerator Water Filter",
+      "spec": "Fits most side-by-side models",
+      "aisle": "43",
+      "bay": "1",
+      "price": 44.98,
+      "tags": [
+        "water filter",
+        "fridge filter",
+        "refrigerator",
+        "ice maker",
+        "taste",
+        "water dispenser"
+      ]
+    },
+    {
+      "name": "Ice Maker Assembly",
+      "spec": "Modular, replaces most top-mount units",
+      "aisle": "43",
+      "bay": "2",
+      "price": 89.0,
+      "tags": [
+        "ice maker",
+        "icemaker",
+        "refrigerator",
+        "no ice",
+        "freezer"
+      ]
+    },
+    {
+      "name": "Refrigerator Door Gasket",
+      "spec": "Magnetic seal, trim-to-fit",
+      "aisle": "43",
+      "bay": "3",
+      "price": 54.98,
+      "tags": [
+        "door gasket",
+        "door seal",
+        "refrigerator",
+        "fridge",
+        "not sealing",
+        "warm",
+        "condensation"
+      ]
+    },
+    {
+      "name": "Defrost Thermostat",
+      "spec": "Bimetal, -6F open",
+      "aisle": "43",
+      "bay": "3",
+      "price": 18.47,
+      "tags": [
+        "defrost thermostat",
+        "frost buildup",
+        "refrigerator",
+        "freezer",
+        "not cooling",
+        "ice buildup"
+      ]
+    },
+    {
+      "name": "Condenser Coil Brush",
+      "spec": "Long flexible bristle",
+      "aisle": "43",
+      "bay": "4",
+      "price": 9.98,
+      "tags": [
+        "coil brush",
+        "condenser",
+        "refrigerator",
+        "dusty coils",
+        "not cooling",
+        "cleaning"
+      ]
+    },
+    {
+      "name": "Refrigerator Start Relay",
+      "spec": "3-in-1 overload relay",
+      "aisle": "43",
+      "bay": "2",
+      "price": 24.98,
+      "tags": [
+        "start relay",
+        "compressor",
+        "refrigerator",
+        "clicking",
+        "not running",
+        "not cooling"
+      ]
+    },
+    {
+      "name": "Fridge Water Line Kit",
+      "spec": "1/4 in. poly tubing, 25 ft with fittings",
+      "aisle": "43",
+      "bay": "1",
+      "price": 21.98,
+      "tags": [
+        "water line",
+        "ice maker line",
+        "tubing",
+        "refrigerator",
+        "install",
+        "supply line"
+      ]
+    },
+    {
+      "name": "Washing Machine Hose Pair",
+      "spec": "Stainless braided, 6 ft, hot + cold",
+      "aisle": "44",
+      "bay": "1",
+      "price": 24.98,
+      "tags": [
+        "washer hose",
+        "washing machine",
+        "burst hose",
+        "supply hose",
+        "leaking washer"
+      ]
+    },
+    {
+      "name": "Dryer Vent Hose Kit",
+      "spec": "4 in. semi-rigid, 8 ft with clamps",
+      "aisle": "44",
+      "bay": "2",
+      "price": 18.98,
+      "tags": [
+        "dryer vent",
+        "dryer hose",
+        "venting",
+        "lint",
+        "dryer not drying",
+        "exhaust"
+      ]
+    },
+    {
+      "name": "Dryer Heating Element",
+      "spec": "Coil element, 5300W 240V",
+      "aisle": "44",
+      "bay": "3",
+      "price": 42.98,
+      "tags": [
+        "heating element",
+        "dryer",
+        "no heat",
+        "not drying",
+        "dryer element"
+      ]
+    },
+    {
+      "name": "Dryer Thermal Fuse",
+      "spec": "Universal, one-time",
+      "aisle": "44",
+      "bay": "3",
+      "price": 11.47,
+      "tags": [
+        "thermal fuse",
+        "dryer",
+        "no heat",
+        "dryer wont start",
+        "fuse"
+      ]
+    },
+    {
+      "name": "Washer Drain Pump",
+      "spec": "Universal replacement, 120V",
+      "aisle": "44",
+      "bay": "2",
+      "price": 56.98,
+      "tags": [
+        "drain pump",
+        "washer",
+        "not draining",
+        "standing water",
+        "washing machine"
+      ]
+    },
+    {
+      "name": "Dryer Lint Trap Brush",
+      "spec": "Flexible 24 in. vent brush",
+      "aisle": "44",
+      "bay": "2",
+      "price": 12.98,
+      "tags": [
+        "lint brush",
+        "dryer vent",
+        "cleaning",
+        "lint trap",
+        "fire hazard"
+      ]
+    },
+    {
+      "name": "Appliance Leveling Feet",
+      "spec": "Adjustable, set of 4",
+      "aisle": "44",
+      "bay": "4",
+      "price": 14.98,
+      "tags": [
+        "leveling feet",
+        "wobbling",
+        "washer",
+        "dryer",
+        "vibration",
+        "unlevel"
+      ]
+    },
+    {
+      "name": "Dishwasher Supply Line",
+      "spec": "3/8 in. compression x 6 ft braided",
+      "aisle": "45",
+      "bay": "1",
+      "price": 16.98,
+      "tags": [
+        "dishwasher supply",
+        "dishwasher line",
+        "install dishwasher",
+        "water line"
+      ]
+    },
+    {
+      "name": "Dishwasher Drain Hose",
+      "spec": "5/8 in. corrugated, 8 ft",
+      "aisle": "45",
+      "bay": "1",
+      "price": 15.47,
+      "tags": [
+        "drain hose",
+        "dishwasher",
+        "not draining",
+        "backing up"
+      ]
+    },
+    {
+      "name": "Dishwasher Door Gasket",
+      "spec": "Universal trim-to-fit seal",
+      "aisle": "45",
+      "bay": "2",
+      "price": 29.98,
+      "tags": [
+        "dishwasher gasket",
+        "door seal",
+        "leaking dishwasher",
+        "water on floor"
+      ]
+    },
+    {
+      "name": "Dishwasher Install Kit",
+      "spec": "Elbow fitting, clamps, wire nuts",
+      "aisle": "45",
+      "bay": "1",
+      "price": 19.98,
+      "tags": [
+        "dishwasher install",
+        "install kit",
+        "elbow",
+        "90 degree fitting"
+      ]
+    },
+    {
+      "name": "Oven Bake Element",
+      "spec": "240V 3000W, universal 4-prong",
+      "aisle": "45",
+      "bay": "3",
+      "price": 34.98,
+      "tags": [
+        "bake element",
+        "oven",
+        "not heating",
+        "oven element",
+        "range"
+      ]
+    },
+    {
+      "name": "Range Drip Pans Set",
+      "spec": "Chrome, fits most coil ranges, 4-pack",
+      "aisle": "45",
+      "bay": "3",
+      "price": 16.98,
+      "tags": [
+        "drip pan",
+        "burner pan",
+        "range",
+        "stove",
+        "coil range"
+      ]
+    },
+    {
+      "name": "Appliance Dolly Strap",
+      "spec": "Ratcheting, 12 ft",
+      "aisle": "46",
+      "bay": "1",
+      "price": 22.98,
+      "tags": [
+        "appliance dolly",
+        "moving strap",
+        "install",
+        "heavy appliance"
+      ]
+    },
+    {
+      "name": "Braided Ice Maker Line",
+      "spec": "1/4 in. compression, 10 ft stainless",
+      "aisle": "43",
+      "bay": "1",
+      "price": 17.98,
+      "tags": [
+        "ice maker line",
+        "braided line",
+        "refrigerator",
+        "water supply"
+      ]
+    },
+    {
+      "name": "Appliance Surge Protector",
+      "spec": "Single outlet, 2400 joules",
+      "aisle": "46",
+      "bay": "2",
+      "price": 29.98,
+      "tags": [
+        "surge protector",
+        "appliance",
+        "power protection",
+        "voltage"
       ]
     }
   ]
