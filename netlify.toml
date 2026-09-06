@@ -1,3 +1,14 @@
+# Where the serverless functions live. Netlify infers this on Git-connected
+# builds, but a drag-and-drop deploy needs it stated explicitly — without it
+# /api/ai falls through to the 404 page.
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
 [[headers]]
   for = "/*"
   [headers.values]
