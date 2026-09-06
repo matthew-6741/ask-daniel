@@ -2775,6 +2775,24 @@ function switchCompareTab(storeKey) {
 }
 
 // ── Fetch raw text from API ──
+// Read a JSON response defensively. When the serverless functions aren't
+// deployed the platform returns its HTML 404 page, and response.json() throws
+// "Unexpected token '<'" — which is true, useless, and alarming to a user.
+async function readJsonOrExplain(response, label) {
+  const ct = response.headers.get('content-type') || '';
+  if (!ct.includes('application/json')) {
+    if (response.status === 404) {
+      throw new Error(`The ${label} service isn't reachable yet. If you just deployed, the site needs one more publish for its functions to come online.`);
+    }
+    throw new Error(`The ${label} service returned an unexpected response (${response.status}). Try again in a moment.`);
+  }
+  try {
+    return await response.json();
+  } catch {
+    throw new Error(`The ${label} service sent a malformed reply. Try again in a moment.`);
+  }
+}
+
 async function fetchFromAPI(prompt, storeKey) {
   const matched  = searchProducts(prompt, currentTrade);
   const inventory = formatProductsForPrompt(matched);
@@ -2803,7 +2821,7 @@ async function fetchFromAPI(prompt, storeKey) {
         ],
       }),
     });
-    const data = await response.json();
+    const data = await readJsonOrExplain(response, 'local model');
     if (!response.ok || data.error) throw new Error(data.error?.message || `Ollama error ${response.status}`);
     return data.choices?.[0]?.message?.content || '';
 
@@ -2822,7 +2840,7 @@ async function fetchFromAPI(prompt, storeKey) {
         image: jobPhoto ? { base64: jobPhoto.base64, mediaType: jobPhoto.mediaType } : null,
       }),
     });
-    const data = await response.json();
+    const data = await readJsonOrExplain(response, 'AI');
     if (response.status === 429) throw new Error(data.error || 'Rate limit reached — try again later.');
     if (!response.ok || data.error) {
       const msg = typeof data.error === 'string' ? data.error : data.error?.message;
@@ -2856,7 +2874,7 @@ async function fetchConsensus(prompt, storeKey) {
     }),
   });
 
-  const data = await response.json();
+  const data = await readJsonOrExplain(response, 'council review');
   if (response.status === 429) {
     consensusLeft = 0;
     applyPlanUI();
