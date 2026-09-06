@@ -3006,7 +3006,11 @@ async function submitJob() {
       }
     }
 
-    if (parsed.items.length === 0) {
+    // An empty list is the correct answer to "I smell gas" — the safety notice
+    // IS the response. Treating no-items as a failure threw away exactly the
+    // answers that matter most and told the user to rephrase a hazard report.
+    const safetyOnly = parsed.items.length === 0 && (parsed.notes || '').trim().length > 20;
+    if (parsed.items.length === 0 && !safetyOnly) {
       throw new Error('No materials returned. Try rephrasing your description.');
     }
 

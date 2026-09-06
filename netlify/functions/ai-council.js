@@ -427,10 +427,12 @@ function parseYouTube(raw) {
 }
 
 // Models confirmed to accept a YouTube fileData part.
-// Same probe as GEMINI_MODELS. Note that YouTube ingestion currently returns
-// 403 "caller does not have permission" on this key — the feature is built and
-// degrades to a note, and turns on by itself when the key gains the
-// entitlement. Do not advertise it as working until that 403 clears.
+// Same probe as GEMINI_MODELS. YouTube ingestion does not work on this key
+// today, for two different reasons: gemini-3.1-flash-lite answers text but
+// returns 403 "caller does not have permission" for a fileData part, and
+// gemini-flash-latest (currently gemini-3.8-flash) has the capability but no
+// free-tier quota left. So the feature ships dark and degrades to a note. A
+// key with billing enabled is what turns it on — not a code change.
 const VIDEO_MODELS = ['gemini-3.1-flash-lite', 'gemini-flash-latest'];
 const VIDEO_TIMEOUT_MS = 20000;
 
@@ -445,6 +447,18 @@ STEPS: at most six short lines, in order.
 UNCLEAR: anything a viewer would still need to measure or check themselves.
 
 If the video is not a repair or maintenance video, reply exactly: NOT_A_REPAIR_VIDEO`;
+
+// Turn a provider error into something a person on a job site can act on.
+function explainVideoFailure(err) {
+  const m = String(err && err.message || '');
+  const tail = 'The list below is from your description only.';
+  if (/quota|rate.?limit|429/i.test(m))       return `Video review has hit today's limit. ${tail}`;
+  if (/permission|403|denied/i.test(m))       return `Video review is not enabled on this account yet. ${tail}`;
+  if (/timed out|timeout|abort/i.test(m))     return `That video took too long to read. ${tail}`;
+  if (/unavailable|not found|404|private/i.test(m))
+    return `That video could not be opened — check it is public. ${tail}`;
+  return `The video could not be read. ${tail}`;
+}
 
 async function watchVideo(video, timeoutMs = VIDEO_TIMEOUT_MS) {
   const key = keyFor('GEMINI_API_KEY');
@@ -531,6 +545,7 @@ ${inventory}${ordering}${videoBlock}
 Your ONLY job is to produce a complete, precise material list so the technician can complete this job in ONE trip with ZERO return visits.
 
 Rules:
+0. STOP FIRST if the description involves immediate danger: a smell of gas, a suspected gas leak, carbon monoxide, sparking or burning smell from wiring, or standing water near live electricity. In those cases return NO materials at all — an empty list — and use NOTES to say to leave the area and call the gas utility, the fire department, or an emergency electrician. Do not sell tape, sealant, joint compound, leak detector or any other part to someone who is describing a live hazard. A short list of nothing plus the right instruction is the correct answer.
 1. Include EVERY item needed — fasteners, fittings, tape, primer, accessories. Never leave anything out.
 2. Be specific on sizes, grades, and specs. Wrong spec = wasted trip.
 3. ${inventory
@@ -1167,7 +1182,7 @@ exports.handler = async (event) => {
     } catch (e) {
       // A failed video read must not sink the request — the typed description
       // is usually enough on its own.
-      videoNote = `The video could not be read (${e.message}). The list below is from your description only.`;
+      videoNote = explainVideoFailure(e);
     }
   }
 

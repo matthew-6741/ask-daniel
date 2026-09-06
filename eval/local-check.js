@@ -332,7 +332,11 @@ const TINY_JPEG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z
     ok('video: a failed video still returns a materials list',
        res.statusCode === 200 && d.items && d.items.length > 0, d.error || `status ${res.statusCode}`);
     ok('video: failure is disclosed rather than hidden',
-       d.videoUsed === false && /could not be read/i.test(d.videoNote || ''), d.videoNote);
+       d.videoUsed === false && /not enabled on this account/i.test(d.videoNote || ''), d.videoNote);
+    // Google's quota errors name internal metrics and rate-limit URLs. None of
+    // that belongs in front of someone buying a flapper.
+    ok('video: the provider error is not leaked to the user',
+       !/googleapis|quota for metric|ai\.google\.dev/i.test(d.videoNote || ''), d.videoNote);
   }
 
   {
