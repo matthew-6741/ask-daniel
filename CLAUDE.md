@@ -1,4 +1,4 @@
-# Ask Daniel — Project Briefing
+# Ask Danny — Project Briefing
 
 ## What this is
 AI-powered trade assistant. User describes a job → AI returns a one-trip material list with exact store aisle numbers. Targets Home Depot, Lowe's, and AutoZone.

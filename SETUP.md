@@ -1,4 +1,4 @@
-# Ask Daniel — Setup Checklist
+# Ask Danny — Setup Checklist
 
 Ordered by what unblocks the most. **Steps 1–2 are all you need for a working
 public beta.** Everything below that is optional polish.

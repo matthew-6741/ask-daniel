@@ -1,4 +1,4 @@
-# Ask Daniel Council Plan
+# Ask Danny Council Plan
 
 This branch is for the multi-model council upgrade inspired by `karpathy/llm-council`.
 

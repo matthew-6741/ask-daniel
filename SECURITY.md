@@ -36,4 +36,4 @@ Out of scope:
 
 ## Supported versions
 
-Ask Daniel is a continuously deployed, pre-launch web app. Only the currently deployed version at `diagnostechai.com` is supported — there are no tagged releases to patch.
+Ask Danny is a continuously deployed, pre-launch web app. Only the currently deployed version at `diagnostechai.com` is supported — there are no tagged releases to patch.

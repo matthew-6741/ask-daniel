@@ -1,5 +1,5 @@
 {
-  "note": "Evaluation set for Ask Daniel. Each job is phrased the way a real person would say it, not the way a search query is written. `expectEssential` lists materials a competent tradesperson would consider non-negotiable — used to measure misses, which matter more than extras. `trap` marks jobs where the obvious answer is wrong or where safety should force a referral rather than a parts list.",
+  "note": "Evaluation set for Ask Danny. Each job is phrased the way a real person would say it, not the way a search query is written. `expectEssential` lists materials a competent tradesperson would consider non-negotiable — used to measure misses, which matter more than extras. `trap` marks jobs where the obvious answer is wrong or where safety should force a referral rather than a parts list.",
   "version": "2026-09",
   "jobs": [
     { "id": "p01", "trade": "plumbing", "text": "My toilet keeps running", "expectEssential": ["flapper", "fill valve"], "note": "flapper first — cheapest and most common cause" },
