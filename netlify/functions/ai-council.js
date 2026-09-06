@@ -35,7 +35,7 @@ const PLANS = {
     label:        'Free',
     max:          5,          // council runs per window
     win:          86400,      // 24h
-    maxOpinions:  2,          // Gemini + Groq
+    maxOpinions:  4,          // every free agent configured, up to 4 drafters
     allowPaid:    false,      // never call paid providers
     maxTokens:    1600,
   },
@@ -43,7 +43,7 @@ const PLANS = {
     label:        'Pro',
     max:          40,
     win:          3600,       // 1h
-    maxOpinions:  4,          // wider council when paid mode is on
+    maxOpinions:  6,          // wider council when paid mode is on
     allowPaid:    true,       // still gated by ENABLE_PAID_COUNCIL
     maxTokens:    2000,
   },
@@ -152,7 +152,48 @@ function withTimeout(promise, ms, label) {
   ]);
 }
 
-// ── Providers ────────────────────────────────────────────────────────
+// ── Agent registry ───────────────────────────────────────────────────
+//
+// ADDING A NEW AGENT: append one entry below. Nothing else needs to change —
+// membership, timeouts, judging, fallback and reporting all read this list.
+//
+//   id       stable key used in logs and responses
+//   name     shown to the user
+//   env      env var holding the key; absent key = agent is skipped, never fatal
+//   cost     'free' | 'paid'   ('paid' also requires ENABLE_PAID_COUNCIL=true)
+//   vision   true if it can read an attached photo
+//   roles    which jobs it can do: 'opinion' (draft a list), 'judge'
+//            (synthesize drafts). An agent can do both.
+//   call(system, prompt, maxTokens, image) -> raw text in NOTES/TOOLS/MATERIALS
+//
+// Agents need not be LLMs. Anything matching that call signature can join —
+// a rules engine, a supplier API wrapper, a retrieval-only responder.
+
+// Most providers speak the OpenAI chat format, so they share one adapter.
+function openAICompatible({ url, keyEnv, model, visionModel }) {
+  return async (system, prompt, maxTokens, image) => {
+    const content = image
+      ? [{ type: 'text', text: prompt },
+         { type: 'image_url', image_url: { url: `data:${image.mediaType};base64,${image.base64}` } }]
+      : prompt;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env[keyEnv]}`,
+      },
+      body: JSON.stringify({
+        model: image && visionModel ? visionModel : model,
+        temperature: 0,
+        max_tokens: maxTokens,
+        messages: [{ role: 'system', content: system }, { role: 'user', content }],
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error?.message || `${model} ${res.status}`);
+    return data.choices?.[0]?.message?.content || '';
+  };
+}
 
 async function callGemini(system, prompt, maxTokens, image) {
   const parts = [{ text: prompt }];
@@ -172,29 +213,6 @@ async function callGemini(system, prompt, maxTokens, image) {
   return data.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
 }
 
-async function callGroq(system, prompt, maxTokens, image) {
-  const content = image
-    ? [{ type: 'text', text: prompt },
-       { type: 'image_url', image_url: { url: `data:${image.mediaType};base64,${image.base64}` } }]
-    : prompt;
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: image ? MODELS.groqVision : MODELS.groqText,
-      temperature: 0,
-      max_tokens: maxTokens,
-      messages: [{ role: 'system', content: system }, { role: 'user', content }],
-    }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error?.message || `Groq ${res.status}`);
-  return data.choices?.[0]?.message?.content || '';
-}
-
 async function callClaude(system, prompt, maxTokens, image) {
   const content = image
     ? [{ type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.base64 } },
@@ -209,9 +227,7 @@ async function callClaude(system, prompt, maxTokens, image) {
     },
     body: JSON.stringify({
       model: process.env.ANTHROPIC_MODEL || 'claude-opus-4-6',
-      max_tokens: maxTokens,
-      temperature: 0,
-      system,
+      max_tokens: maxTokens, temperature: 0, system,
       messages: [{ role: 'user', content }],
     }),
   });
@@ -220,54 +236,86 @@ async function callClaude(system, prompt, maxTokens, image) {
   return data.content?.map(b => b.text || '').join('') || '';
 }
 
-async function callOpenAICompatible(baseUrl, apiKey, model, system, prompt, maxTokens, image) {
-  const content = image
-    ? [{ type: 'text', text: prompt },
-       { type: 'image_url', image_url: { url: `data:${image.mediaType};base64,${image.base64}` } }]
-    : prompt;
-  const res = await fetch(baseUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model, temperature: 0, max_tokens: maxTokens,
-      messages: [{ role: 'system', content: system }, { role: 'user', content }],
-    }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error?.message || `${model} ${res.status}`);
-  return data.choices?.[0]?.message?.content || '';
-}
+const AGENTS = [
+  // ---- Free tier: every provider with a usable free plan ----
+  { id: 'gemini', name: 'Gemini', env: 'GEMINI_API_KEY', cost: 'free', vision: true,
+    roles: ['opinion', 'judge'], call: callGemini },
 
-const callOpenAI = (s, p, m, i) =>
-  callOpenAICompatible('https://api.openai.com/v1/chat/completions', process.env.OPENAI_API_KEY, MODELS.openai, s, p, m, i);
-const callGrok = (s, p, m, i) =>
-  callOpenAICompatible('https://api.x.ai/v1/chat/completions', process.env.XAI_API_KEY, MODELS.xai, s, p, m, i);
+  { id: 'groq', name: 'Groq', env: 'GROQ_API_KEY', cost: 'free', vision: true,
+    roles: ['opinion', 'judge'],
+    call: openAICompatible({ url: 'https://api.groq.com/openai/v1/chat/completions',
+      keyEnv: 'GROQ_API_KEY', model: MODELS.groqText, visionModel: MODELS.groqVision }) },
 
-// Free council never includes paid providers, regardless of which keys exist.
-function councilMembers(tier) {
+  { id: 'cerebras', name: 'Cerebras', env: 'CEREBRAS_API_KEY', cost: 'free', vision: false,
+    roles: ['opinion'],
+    call: openAICompatible({ url: 'https://api.cerebras.ai/v1/chat/completions',
+      keyEnv: 'CEREBRAS_API_KEY', model: 'llama-3.3-70b' }) },
+
+  { id: 'mistral', name: 'Mistral', env: 'MISTRAL_API_KEY', cost: 'free', vision: true,
+    roles: ['opinion'],
+    call: openAICompatible({ url: 'https://api.mistral.ai/v1/chat/completions',
+      keyEnv: 'MISTRAL_API_KEY', model: 'mistral-large-latest', visionModel: 'pixtral-large-latest' }) },
+
+  { id: 'openrouter', name: 'OpenRouter', env: 'OPENROUTER_API_KEY', cost: 'free', vision: true,
+    roles: ['opinion'],
+    call: openAICompatible({ url: 'https://openrouter.ai/api/v1/chat/completions',
+      keyEnv: 'OPENROUTER_API_KEY', model: 'meta-llama/llama-3.3-70b-instruct:free' }) },
+
+  { id: 'github', name: 'GitHub Models', env: 'GITHUB_MODELS_TOKEN', cost: 'free', vision: true,
+    roles: ['opinion'],
+    call: openAICompatible({ url: 'https://models.inference.ai.azure.com/chat/completions',
+      keyEnv: 'GITHUB_MODELS_TOKEN', model: 'gpt-4o-mini' }) },
+
+  // ---- Paid tier: requires ENABLE_PAID_COUNCIL=true AND a plan allowing it ----
+  { id: 'claude', name: 'Claude', env: 'ANTHROPIC_API_KEY', cost: 'paid', vision: true,
+    roles: ['opinion', 'judge'], call: callClaude },
+
+  { id: 'gpt', name: 'GPT', env: 'OPENAI_API_KEY', cost: 'paid', vision: true,
+    roles: ['opinion', 'judge'],
+    call: openAICompatible({ url: 'https://api.openai.com/v1/chat/completions',
+      keyEnv: 'OPENAI_API_KEY', model: MODELS.openai }) },
+
+  { id: 'grok', name: 'Grok', env: 'XAI_API_KEY', cost: 'paid', vision: true,
+    roles: ['opinion'],
+    call: openAICompatible({ url: 'https://api.x.ai/v1/chat/completions',
+      keyEnv: 'XAI_API_KEY', model: MODELS.xai }) },
+];
+
+// Agents eligible for this request: key present, cost allowed by plan + switch,
+// able to see the photo if one was attached, and able to do the role asked for.
+function eligibleAgents(tier, { role = 'opinion', hasImage = false } = {}) {
   const plan = planFor(tier);
-  const free = [
-    { name: 'Gemini', env: 'GEMINI_API_KEY', call: callGemini, paid: false },
-    { name: 'Groq',   env: 'GROQ_API_KEY',   call: callGroq,   paid: false },
-  ];
-  const paid = [
-    { name: 'Claude', env: 'ANTHROPIC_API_KEY', call: callClaude, paid: true },
-    { name: 'GPT',    env: 'OPENAI_API_KEY',    call: callOpenAI, paid: true },
-    { name: 'Grok',   env: 'XAI_API_KEY',       call: callGrok,   paid: true },
-  ];
-  // Paid providers require BOTH a plan that allows them and the server switch.
-  // Either one being off keeps them out, so a leaked tier claim can't spend money.
-  const usePaid = plan.allowPaid && paidEnabled();
-  const pool = usePaid ? [...free, ...paid] : free;
-  return pool.filter(m => process.env[m.env]).slice(0, plan.maxOpinions);
+  const paidOk = plan.allowPaid && paidEnabled();
+  return AGENTS.filter(a =>
+    process.env[a.env] &&
+    (a.cost === 'free' || paidOk) &&
+    a.roles.includes(role) &&
+    (!hasImage || a.vision)
+  );
 }
 
-// The judge must be able to read images too, since it re-checks photo jobs.
-function pickJudge(members) {
-  return members.find(m => m.name === 'Gemini')
-      || members.find(m => m.name === 'Claude')
-      || members[0]
-      || null;
+// Opinion panel for this request, capped by the plan.
+//
+// Ordering matters once the cap bites. In paid mode the paid models are the
+// reason someone upgraded, so they seat first — otherwise the free agents,
+// which happen to come first in the registry, would fill every seat and the
+// paid keys would go unused.
+function councilMembers(tier, hasImage) {
+  const plan = planFor(tier);
+  const eligible = eligibleAgents(tier, { role: 'opinion', hasImage });
+  const paidMode = plan.allowPaid && paidEnabled();
+  const ordered = paidMode
+    ? [...eligible].sort((a, b) => (a.cost === 'paid' ? 0 : 1) - (b.cost === 'paid' ? 0 : 1))
+    : eligible;
+  return ordered.slice(0, plan.maxOpinions);
+}
+
+// Judge should ideally not be one of the drafters — an independent reviewer is
+// less likely to simply re-assert its own draft. Falls back to a drafter, then
+// to any judge-capable agent, when the roster is small.
+function pickJudge(tier, hasImage, drafterIds = []) {
+  const judges = eligibleAgents(tier, { role: 'judge', hasImage });
+  return judges.find(j => !drafterIds.includes(j.id)) || judges[0] || null;
 }
 
 // ── Parsing ──────────────────────────────────────────────────────────
@@ -418,7 +466,7 @@ exports.handler = async (event) => {
     return { statusCode: 400, headers: cors, body: JSON.stringify({ error: 'Missing job description.' }) };
   }
 
-  const members = councilMembers(tier);
+  const members = councilMembers(tier, !!image);
   if (!members.length) {
     return { statusCode: 500, headers: cors, body: JSON.stringify({ error: 'No AI providers configured on the server.' }) };
   }
@@ -433,7 +481,7 @@ exports.handler = async (event) => {
   settled.forEach((r, i) => {
     const name = members[i].name;
     if (r.status === 'fulfilled' && parseResponse(r.value).items.length) {
-      drafts.push({ provider: name, raw: r.value, parsed: parseResponse(r.value) });
+      drafts.push({ id: members[i].id, provider: name, raw: r.value, parsed: parseResponse(r.value) });
       status.push({ provider: name, ok: true, stage: 'opinion', itemCount: parseResponse(r.value).items.length });
     } else {
       const why = r.status === 'rejected'
@@ -455,7 +503,7 @@ exports.handler = async (event) => {
   let judgeName = null;
 
   if (drafts.length > 1) {
-    const judge = pickJudge(members);
+    const judge = pickJudge(tier, !!image, drafts.map(d => d.id));
     if (judge) {
       judgeName = judge.name;
       try {
@@ -502,6 +550,7 @@ exports.handler = async (event) => {
       judged,
       judge: judgeName,
       opinionsUsed: drafts.map(d => d.provider),
+      agentsAvailable: eligibleAgents(tier, { role: 'opinion', hasImage: !!image }).map(a => a.name),
       providers: status,
       apiCalls: drafts.length + (judged ? 1 : 0),
       tier,
