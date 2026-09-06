@@ -813,6 +813,57 @@ function qtyOf(i) {
   return !isNaN(n) && n > 0 ? n : 1;
 }
 
+// ── Circuit breaker ──────────────────────────────────────────────────
+//
+// A provider that is down still costs the full per-stage timeout on every
+// request. During an outage that is the difference between a council answering
+// in 3s with one model and answering in 12s with the same one model.
+//
+// After repeated failures a provider is skipped outright for a cooldown, then
+// allowed a single trial request. If that succeeds the circuit closes.
+//
+// State is per-container: a cold start resets it. That is fine for what this
+// protects against — a burst of requests during an outage — and avoids adding
+// a storage round-trip to the hot path of every call.
+const BREAKER_THRESHOLD  = 3;      // consecutive failures before opening
+const BREAKER_COOLDOWN_MS = 60000; // how long to skip before a trial request
+
+const breakers = {};
+
+function breakerFor(id) {
+  if (!breakers[id]) breakers[id] = { failures: 0, openedAt: 0, trialInFlight: false };
+  return breakers[id];
+}
+
+// Should this provider be skipped right now?
+function circuitOpen(id) {
+  const b = breakerFor(id);
+  if (b.failures < BREAKER_THRESHOLD) return false;
+
+  const elapsed = Date.now() - b.openedAt;
+  if (elapsed < BREAKER_COOLDOWN_MS) return true;
+
+  // Cooldown elapsed — let exactly one request through to test the water.
+  if (b.trialInFlight) return true;
+  b.trialInFlight = true;
+  return false;
+}
+
+function recordSuccess(id) {
+  const b = breakerFor(id);
+  b.failures = 0;
+  b.openedAt = 0;
+  b.trialInFlight = false;
+}
+
+function recordFailure(id) {
+  const b = breakerFor(id);
+  b.failures += 1;
+  b.trialInFlight = false;
+  if (b.failures >= BREAKER_THRESHOLD && !b.openedAt) b.openedAt = Date.now();
+  else if (b.failures >= BREAKER_THRESHOLD) b.openedAt = Date.now();
+}
+
 // ── Handler ──────────────────────────────────────────────────────────
 
 exports.handler = async (event) => {
@@ -879,7 +930,9 @@ exports.handler = async (event) => {
     return { statusCode: 400, headers: cors, body: JSON.stringify({ error: 'Missing job description.' }) };
   }
 
-  const members = councilMembers(tier, !!image);
+  const allMembers = councilMembers(tier, !!image);
+  const members = allMembers.filter(m => !circuitOpen(m.id));
+  const skipped = allMembers.filter(m => circuitOpen(m.id)).map(m => m.name);
   if (!members.length) {
     return { statusCode: 500, headers: cors, body: JSON.stringify({ error: 'No AI providers configured on the server.' }) };
   }
@@ -894,9 +947,11 @@ exports.handler = async (event) => {
   settled.forEach((r, i) => {
     const name = members[i].name;
     if (r.status === 'fulfilled' && normalizeResponse(r.value).items.length) {
+      recordSuccess(members[i].id);
       drafts.push({ id: members[i].id, provider: name, raw: r.value, parsed: normalizeResponse(r.value) });
       status.push({ provider: name, ok: true, stage: 'opinion', itemCount: parseResponse(r.value).items.length });
     } else {
+      recordFailure(members[i].id);
       const why = r.status === 'rejected'
         ? String(r.reason?.message || r.reason).slice(0, 160)
         : 'returned no parseable materials';
@@ -994,6 +1049,7 @@ exports.handler = async (event) => {
       judge: judgeName,
       opinionsUsed: drafts.map(d => d.provider),
       agentsAvailable: eligibleAgents(tier, { role: 'opinion', hasImage: !!image }).map(a => a.name),
+      agentsSkipped: skipped.length ? skipped : undefined,
       providers: status,
       apiCalls: drafts.length + (judged ? 1 : 0),
       elapsedMs: Date.now() - startedAt,
