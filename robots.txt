@@ -1,4 +1,4 @@
-# DiagnostechAI — robots.txt
+# Ask Daniel — robots.txt
 
 User-agent: *
 Allow: /

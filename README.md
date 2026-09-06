@@ -1,4 +1,4 @@
-# DiagnostechAI
+# Ask Daniel
 
 **Describe the job. Get a one-trip material list with aisle numbers.**
 
@@ -8,7 +8,7 @@
 
 Contractors lose hours and margin on the second trip to the supply store — the fitting that didn't fit, the tool left back at the shop, the size that was wrong.
 
-DiagnostechAI takes a job described in plain language:
+Ask Daniel takes a job described in plain language:
 
 > *"Replace a 40-gallon gas water heater"*
 
@@ -16,7 +16,7 @@ and returns a single list: materials with quantities and specs, the tools the jo
 
 ## Why it doesn't invent part numbers
 
-A general-purpose model will happily produce plausible-sounding products that don't exist. DiagnostechAI grounds every answer in a curated inventory instead:
+A general-purpose model will happily produce plausible-sounding products that don't exist. Ask Daniel grounds every answer in a curated inventory instead:
 
 1. `searchProducts(query, trade)` keyword-scores a hand-curated inventory for that trade (`products.json`)
 2. Top matches are injected into the system prompt as a **VERIFIED STORE INVENTORY** block

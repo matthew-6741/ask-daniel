@@ -1,4 +1,4 @@
-# DiagnosTech AI Council Plan
+# Ask Daniel Council Plan
 
 This branch is for the multi-model council upgrade inspired by `karpathy/llm-council`.
 
