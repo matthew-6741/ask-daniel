@@ -54,7 +54,7 @@ const GROQ_VISION_MODELS = [
 // Transient capacity errors are retryable too — a provider saying "high demand"
 // means try elsewhere, not give up. Treating them as fatal was collapsing the
 // council to a single opinion whenever Gemini was busy.
-const RETRYABLE = /does not exist|do not have access|decommissioned|empty content|no longer available|not found|does not exist|not supported|timed out|high demand|overloaded|RESOURCE_EXHAUSTED|try again|unavailable|rate limit|429|503/i;
+const RETRYABLE = /does not exist|do not have access|decommissioned|empty content|validate JSON|failed_generation|no longer available|not found|does not exist|not supported|timed out|high demand|overloaded|RESOURCE_EXHAUSTED|try again|unavailable|rate limit|429|503/i;
 
 // ── Plan configuration ───────────────────────────────────────────────
 // Council review itself is available to EVERYONE. Plans differ only in how
@@ -410,7 +410,7 @@ MATERIALS:
 
 // Most providers speak the OpenAI chat format, so they share one adapter.
 function openAICompatible({ url, keyEnv, model, visionModel }) {
-  return async (system, prompt, maxTokens, image) => {
+  return async (system, prompt, maxTokens, image, opts = {}) => {
     const content = image
       ? [{ type: 'text', text: prompt },
          { type: 'image_url', image_url: { url: `data:${image.mediaType};base64,${image.base64}` } }]
@@ -425,7 +425,13 @@ function openAICompatible({ url, keyEnv, model, visionModel }) {
         model: image && visionModel ? visionModel : model,
         temperature: 0,
         max_tokens: maxTokens,
-        response_format: { type: 'json_object' },
+        // JSON mode is dropped on retry. A model asked for a safety refusal
+        // wants to answer in prose — "evacuate and call the gas utility" is not
+        // a material list — and the provider rejects that as invalid JSON. The
+        // structured-output constraint was suppressing exactly the answers that
+        // matter most, so a validation failure falls back to plain text, which
+        // the normalizer parses anyway.
+        ...(opts.noJsonMode ? {} : { response_format: { type: 'json_object' } }),
         messages: [{ role: 'system', content: system }, { role: 'user', content }],
       }),
     });
@@ -443,13 +449,19 @@ async function callGroq(system, prompt, maxTokens, image) {
       url: 'https://api.groq.com/openai/v1/chat/completions',
       keyEnv: 'GROQ_API_KEY', model,
     });
-    try {
-      const out = await once(system, prompt, maxTokens, image);
-      if (out && out.trim()) return out;
-      lastErr = new Error(`${model} returned empty content`);
-    } catch (e) {
-      lastErr = e;
-      if (!RETRYABLE.test(e.message)) throw e;
+    // Try JSON first, then the same model in plain text if JSON was refused.
+    for (const opts of [{}, { noJsonMode: true }]) {
+      try {
+        const out = await once(system, prompt, maxTokens, image, opts);
+        if (out && out.trim()) return out;
+        lastErr = new Error(`${model} returned empty content`);
+      } catch (e) {
+        lastErr = e;
+        const jsonRefused = /validate JSON|failed_generation|json/i.test(e.message);
+        if (!opts.noJsonMode && jsonRefused) continue;   // retry same model as text
+        if (!RETRYABLE.test(e.message)) throw e;
+        break;                                            // move to the next model
+      }
     }
   }
   throw lastErr || new Error('No usable Groq model');
@@ -639,6 +651,14 @@ function normalizeResponse(raw) {
   }
 
   const parsed = parseResponse(text);
+
+  // A safety refusal arrives as plain prose — "Smelling gas near a furnace is
+  // an immediate hazard, evacuate and call the utility" — with no NOTES: marker
+  // and no material rows. Discarding it as unparseable threw away the single
+  // most important kind of answer this product gives.
+  if (!parsed.items.length && !parsed.notes && text.length > 40) {
+    return { notes: text.slice(0, 600), tools: [], items: [], format: 'prose' };
+  }
   return { ...parsed, format: 'text' };
 }
 
@@ -941,6 +961,20 @@ exports.handler = async (event) => {
   const allMembers = councilMembers(tier, !!image);
   const members = allMembers.filter(m => !circuitOpen(m.id));
   const skipped = allMembers.filter(m => circuitOpen(m.id)).map(m => m.name);
+
+  // Every provider being circuit-broken is an outage, not a missing key. The
+  // old message sent the reader to check configuration that was already fine.
+  if (!members.length && allMembers.length) {
+    return {
+      statusCode: 503,
+      headers: { ...cors, 'Retry-After': '60' },
+      body: JSON.stringify({
+        error: 'All AI providers are temporarily unavailable. Try again in a minute.',
+        agentsSkipped: skipped,
+        transient: true,
+      }),
+    };
+  }
   if (!members.length) {
     return { statusCode: 500, headers: cors, body: JSON.stringify({ error: 'No AI providers configured on the server.' }) };
   }
@@ -954,9 +988,15 @@ exports.handler = async (event) => {
   const status = [];
   settled.forEach((r, i) => {
     const name = members[i].name;
-    if (r.status === 'fulfilled' && normalizeResponse(r.value).items.length) {
+    // A draft is usable if it has materials OR substantive notes. "Leave the
+    // house and call the gas company" is the right answer to a gas smell and
+    // has no materials at all — requiring items discarded exactly the responses
+    // that matter most.
+    const draft = r.status === 'fulfilled' ? normalizeResponse(r.value) : null;
+    const usable = draft && (draft.items.length > 0 || (draft.notes || '').trim().length > 20);
+    if (usable) {
       recordSuccess(members[i].id);
-      drafts.push({ id: members[i].id, provider: name, raw: r.value, parsed: normalizeResponse(r.value) });
+      drafts.push({ id: members[i].id, provider: name, raw: r.value, parsed: draft });
       status.push({ provider: name, ok: true, stage: 'opinion', itemCount: parseResponse(r.value).items.length });
     } else {
       recordFailure(members[i].id);
@@ -968,7 +1008,7 @@ exports.handler = async (event) => {
   });
 
   if (!drafts.length) {
-    return { statusCode: 502, headers: cors, body: JSON.stringify({ error: 'No council member returned a usable list.', providers: status }) };
+    return { statusCode: 502, headers: cors, body: JSON.stringify({ error: 'No council member returned a usable answer.', providers: status }) };
   }
 
   // ── Stage 2: judge ──
@@ -998,7 +1038,7 @@ exports.handler = async (event) => {
           'Judge'
         );
         const parsed = normalizeResponse(verdict);
-        if (parsed.items.length) {
+        if (parsed.items.length || (parsed.notes || '').trim().length > 20) {
           finalParsed = parsed;
           judged = true;
           status.push({ provider: judge.name, ok: true, stage: 'judge', itemCount: parsed.items.length });

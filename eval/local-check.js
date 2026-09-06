@@ -179,6 +179,30 @@ const TINY_JPEG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z
     ok('8. safety notes survive the pipeline', safetyPreserved || d.error, (d.notes || d.error || '').slice(0, 70));
   }
 
+  // 8b. safety refusal with zero materials must count as a usable answer
+  {
+    const REFUSAL = JSON.stringify({
+      notes: 'Leave the house immediately and call the gas company from outside. Do not operate switches.',
+      tools: [], materials: [],
+    });
+    const m = makeFetch({ groq: () => groqBody(REFUSAL), gemini: () => geminiBody(REFUSAL) });
+    const { handler } = load('ai-council.js', m.fetch);
+    const res = await handler(evt({ tier: 'free', prompt: 'I smell gas near the furnace', store: 'hd', trade: 'hvac' }));
+    const d = JSON.parse(res.body);
+    ok('8b. zero-material safety answer is not treated as a failure',
+       res.statusCode === 200 && /gas company/i.test(d.notes || ''),
+       d.error || `status ${res.statusCode} notes=${(d.notes||'').slice(0,40)}`);
+  }
+
+  // 8c. a prose safety answer with no NOTES: marker must survive
+  {
+    const PROSE = '**Safety Alert:** Smelling gas near a furnace is an immediate hazard. Evacuate and call your gas utility from outside. Do not operate electrical switches.';
+    const m = makeFetch({ groq: () => groqBody(PROSE), gemini: () => geminiBody(PROSE) });
+    const { handler } = load('ai-council.js', m.fetch);
+    const d = JSON.parse((await handler(evt({ tier: 'free', prompt: 'I smell gas near the furnace', store: 'hd', trade: 'hvac' }))).body);
+    ok('8c. unstructured safety prose is kept', /gas utility|evacuate/i.test(d.notes || ''), (d.notes || d.error || '').slice(0, 60));
+  }
+
   // 9. prompt injection
   {
     const m = makeFetch({});
