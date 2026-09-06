@@ -226,26 +226,19 @@ function withTimeout(promise, ms, label) {
 //   3. any variable whose VALUE carries the provider's key prefix — the most
 //      reliable signal, since a value starting gsk_ is a Groq key whatever it
 //      was called
-function resolveKey(canonical, providerWord, valuePrefixes = []) {
-  // When the provider's keys have a known prefix, the value must carry it —
-  // however the variable was named. A variable called GEMINI_KEY holding a
-  // Google session token ("AQ.…") is not a Gemini key, and accepting it would
-  // put the agent in the council only to fail with 401 on every request.
+function resolveKey(canonical, aliases = [], valuePrefixes = []) {
+  // Only these names are consulted. An earlier version scanned every
+  // environment variable for anything matching a key prefix, which meant an
+  // unrelated secret could be picked up and sent to a model provider. Aliases
+  // exist because real deployments get hand-named ("newapikey", "photos"), but
+  // the list is explicit and the value must still carry the right prefix.
   const looksRight = v =>
     !valuePrefixes.length || valuePrefixes.some(pre => String(v).startsWith(pre));
 
-  const direct = process.env[canonical];
-  if (direct && looksRight(direct)) return direct;
-
-  const entries = Object.entries(process.env).filter(([, v]) => v && looksRight(v));
-  const word = providerWord.toLowerCase();
-
-  const byName = entries.find(([k]) => k.toLowerCase().includes(word));
-  if (byName) return byName[1];
-
-  // No name hint, but the value's prefix identifies the provider unambiguously.
-  if (valuePrefixes.length && entries.length) return entries[0][1];
-
+  for (const name of [canonical, ...aliases]) {
+    const v = process.env[name];
+    if (v && looksRight(v)) return v;
+  }
   return null;
 }
 
@@ -253,21 +246,20 @@ function resolveKey(canonical, providerWord, valuePrefixes = []) {
 // retired as of September 2026; "AQ..." is the newer auth key that AI Studio
 // now creates by default. Accept both — rejecting AQ. keys would turn a valid
 // credential away.
+// canonical -> [accepted alternative names], [required value prefixes]
 const KEY_HINTS = {
-  GEMINI_API_KEY:      ['gemini', ['AIza', 'AQ.']],
-  GROQ_API_KEY:        ['groq',   ['gsk_']],
-  ANTHROPIC_API_KEY:   ['anthropic', ['sk-ant-']],
-  OPENAI_API_KEY:      ['openai', ['sk-proj-']],
-  XAI_API_KEY:         ['xai',    ['xai-']],
-  CEREBRAS_API_KEY:    ['cerebras', ['csk-']],
-  MISTRAL_API_KEY:     ['mistral', []],
-  OPENROUTER_API_KEY:  ['openrouter', ['sk-or-']],
+  GEMINI_API_KEY:    [['GEMINI_KEY', 'GOOGLE_API_KEY', 'photos'],      ['AIza', 'AQ.']],
+  GROQ_API_KEY:      [['GROQ_KEY', 'newapikey', 'KeyfromGroq'],        ['gsk_']],
+  ANTHROPIC_API_KEY: [['CLAUDE_API_KEY'],                              ['sk-ant-']],
+  OPENAI_API_KEY:    [['OPENAI_KEY'],                                  ['sk-proj-', 'sk-']],
+  XAI_API_KEY:       [['GROK_API_KEY'],                                ['xai-']],
 };
 
 function keyFor(envName) {
-  const [word, prefixes] = KEY_HINTS[envName] || [envName.toLowerCase(), []];
-  return resolveKey(envName, word, prefixes);
+  const [aliases, prefixes] = KEY_HINTS[envName] || [[], []];
+  return resolveKey(envName, aliases, prefixes);
 }
+
 
 // ── System prompt ────────────────────────────────────────────────────
 //
@@ -290,6 +282,50 @@ const TRADE_LABELS = {
   auto:      'Automotive',
   appliance: 'Appliance repair',
 };
+
+// The product database is loaded here, not accepted from the request. The
+// client used to post `verifiedAisles` and the server treated them as ground
+// truth — so a crafted request could assert any aisle it liked and have it come
+// back stamped "verified from our database", which is precisely the claim the
+// database exists to make trustworthy.
+const PRODUCTS = require('./products.json');
+
+const TRADE_BUCKET = { carpentry: 'framing' };
+
+// Retrieval mirrors the client's, but the server decides what is verified.
+function lookupInventory(trade, query, limit = 30) {
+  const bucket = TRADE_BUCKET[trade] || trade;
+  const pool = []
+    .concat(Array.isArray(PRODUCTS[bucket]) ? PRODUCTS[bucket] : [])
+    .concat(Array.isArray(PRODUCTS.general) ? PRODUCTS.general : []);
+
+  const seen = new Set();
+  const unique = pool.filter(p => {
+    const k = String(p.name).toLowerCase();
+    if (seen.has(k)) return false;
+    seen.add(k); return true;
+  });
+
+  const kw = tokenize(query);
+  if (!kw.length) return unique.slice(0, limit);
+
+  return unique
+    .map(p => {
+      const name = new Set(tokenize(p.name));
+      const tags = new Set((p.tags || []).flatMap(t => tokenize(t)));
+      const spec = new Set(tokenize(p.spec));
+      let score = 0;
+      for (const w of kw) {
+        if (name.has(w))      score += 3;
+        else if (tags.has(w)) score += 2;
+        else if (spec.has(w)) score += 1;
+      }
+      return { ...p, score };
+    })
+    .filter(p => p.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+}
 
 function formatInventory(rows) {
   if (!Array.isArray(rows) || !rows.length) return '';
@@ -467,22 +503,6 @@ const AGENTS = [
   { id: 'groq', name: 'Groq', env: 'GROQ_API_KEY', cost: 'free', vision: true,
     roles: ['opinion', 'judge'], call: callGroq },
 
-  { id: 'cerebras', name: 'Cerebras', env: 'CEREBRAS_API_KEY', cost: 'free', vision: false,
-    roles: ['opinion'],
-    call: openAICompatible({ url: 'https://api.cerebras.ai/v1/chat/completions',
-      keyEnv: 'CEREBRAS_API_KEY', model: 'llama-3.3-70b' }) },
-
-  { id: 'mistral', name: 'Mistral', env: 'MISTRAL_API_KEY', cost: 'free', vision: true,
-    roles: ['opinion'],
-    call: openAICompatible({ url: 'https://api.mistral.ai/v1/chat/completions',
-      keyEnv: 'MISTRAL_API_KEY', model: 'mistral-large-latest', visionModel: 'pixtral-large-latest' }) },
-
-  { id: 'openrouter', name: 'OpenRouter', env: 'OPENROUTER_API_KEY', cost: 'free', vision: true,
-    roles: ['opinion'],
-    call: openAICompatible({ url: 'https://openrouter.ai/api/v1/chat/completions',
-      keyEnv: 'OPENROUTER_API_KEY', model: 'meta-llama/llama-3.3-70b-instruct:free' }) },
-
-  // ---- Paid tier: requires ENABLE_PAID_COUNCIL=true AND a plan allowing it ----
   { id: 'claude', name: 'Claude', env: 'ANTHROPIC_API_KEY', cost: 'paid', vision: true,
     roles: ['opinion', 'judge'], call: callClaude },
 
@@ -697,13 +717,32 @@ MATERIALS:
 /MATERIALS`;
 }
 
+function priceOf(i) {
+  const n = parseFloat(String(i.price || '').replace(/[^0-9.]/g, ''));
+  return isNaN(n) ? 0 : n;
+}
+function qtyOf(i) {
+  const n = parseFloat(String(i.qty || '').replace(/[^0-9.]/g, ''));
+  return !isNaN(n) && n > 0 ? n : 1;
+}
+
 // ── Handler ──────────────────────────────────────────────────────────
 
 exports.handler = async (event) => {
   const startedAt = Date.now();
   const msLeft = () => TOTAL_BUDGET_MS - (Date.now() - startedAt);
+  // Only our own front-ends. A wildcard let any site call this endpoint from a
+  // visitor's browser and spend the quota attributed to their IP.
+  const ALLOWED_ORIGINS = [
+    'https://diagnostechai.com',
+    'https://www.diagnostechai.com',
+    'https://diagnostech.netlify.app',
+    'http://localhost:3456',
+  ];
+  const origin = event.headers.origin || event.headers.Origin || '';
   const cors = {
-    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Origin': ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0],
+    'Vary': 'Origin',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
   };
@@ -732,16 +771,18 @@ exports.handler = async (event) => {
   }
 
   // Built here, never taken from the request.
+  // Retrieval happens here, from our own database.
+  const serverInventory = lookupInventory(body.trade, prompt);
   const system = buildSystemPrompt({
     storeKey:      body.store,
     trade:         body.trade,
     city:          body.city,
     region:        body.region,
-    inventoryRows: body.inventory,
+    inventoryRows: serverInventory,
   });
   const prompt = sanitizeInput(body.prompt || '');
   const maxTokens = Math.min(Number(body.max_tokens) || 1600, plan.maxTokens);
-  const verifiedAisles = Array.isArray(body.verifiedAisles) ? body.verifiedAisles.slice(0, 60) : null;
+
 
   const image = validateImage(body.image);
   if (image === false) {
@@ -820,14 +861,40 @@ exports.handler = async (event) => {
     }
   }
 
-  // Fallback when the judge failed: prefer the most complete draft rather than
-  // silently returning whichever provider happened to answer first.
+  // Judge failed but several drafts exist. Taking the longest draft throws away
+  // whatever the others caught — a part only one model spotted is often the one
+  // that saves the second trip. Union them instead, deduped by the same
+  // similarity used elsewhere, and mark how many drafts backed each item so the
+  // UI can still show confidence.
   if (!judged && drafts.length > 1) {
-    finalParsed = drafts.slice().sort((a, b) => b.parsed.items.length - a.parsed.items.length)[0].parsed;
+    const merged = [];
+    drafts.forEach(d => {
+      d.parsed.items.forEach(item => {
+        const t = tokenize(item.name);
+        const hit = merged.find(m => similarity(t, tokenize(m.name)) > 0.7);
+        if (hit) {
+          if (!hit.providers.includes(d.provider)) {
+            hit.providers.push(d.provider);
+            hit.votes += 1;
+          }
+        } else {
+          merged.push({ ...item, votes: 1, providers: [d.provider], totalProviders: drafts.length });
+        }
+      });
+    });
+    merged.sort((a, b) => b.votes - a.votes);
+    finalParsed = {
+      notes: drafts.map(d => d.parsed.notes).find(Boolean) || '',
+      tools: finalParsed.tools,
+      items: merged,
+    };
   }
 
   // ── Aisle verification always runs last ──
-  const items = verifyAisles(finalParsed.items, verifiedAisles);
+  const items = verifyAisles(
+    finalParsed.items,
+    serverInventory.map(p => ({ name: p.name, aisle: `Aisle ${p.aisle}` }))
+  );
 
   return {
     statusCode: 200,
@@ -849,6 +916,13 @@ exports.handler = async (event) => {
       notes: finalParsed.notes,
       tools: finalParsed.tools,
       items,
+      // Structured summary so callers don't re-parse text to learn basics.
+      summary: {
+        itemCount:     items.length,
+        verifiedCount: items.filter(i => i.aisleVerified).length,
+        estimatedLow:  Number(items.reduce((n, i) => n + priceOf(i) * qtyOf(i) * 0.9, 0).toFixed(2)),
+        estimatedHigh: Number(items.reduce((n, i) => n + priceOf(i) * qtyOf(i) * 1.1, 0).toFixed(2)),
+      },
     }),
   };
 };
