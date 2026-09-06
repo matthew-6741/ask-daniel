@@ -1,0 +1,9 @@
+{
+  "name": "ask-daniel-functions",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Serverless functions for Ask Daniel",
+  "dependencies": {
+    "@netlify/blobs": "^8.1.0"
+  }
+}

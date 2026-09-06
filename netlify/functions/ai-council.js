@@ -131,32 +131,56 @@ const OPINION_BUDGET_MS = 12000;  // Gemini answers in 2-3s but spikes higher
 const JUDGE_MIN_MS      = 4000;
 const STAGE_TIMEOUT_MS  = OPINION_BUDGET_MS;
 
-const rateLimitStore = {};
+// ── Rate limiting ────────────────────────────────────────────────────
+//
+// Counters live in Netlify Blobs rather than module memory. The in-memory
+// version reset on every cold start, so the "5 free council runs per day" cap
+// was really "5 per warm container" — anyone could wait out a restart, and the
+// number shown in the UI was fiction.
+//
+// Blobs is eventually consistent, so two requests landing in the same instant
+// can both read the same count. That is an acceptable overshoot for abuse
+// deterrence; it is not a billing meter.
+const { getStore } = require('@netlify/blobs');
 
-function paidEnabled() {
-  return String(process.env.ENABLE_PAID_COUNCIL || '').toLowerCase() === 'true';
+function limitStore() {
+  return getStore({ name: 'rate-limits', consistency: 'strong' });
 }
 
-function getRateLimitKey(event, tier) {
-  const ip =
-    event.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
-    event.headers['client-ip'] || 'unknown';
-  return `council:${tier}:${ip}`;
-}
-
-function checkRateLimit(key, tier) {
+async function checkRateLimit(key, tier) {
   const { max, win } = planFor(tier);
   const now = Math.floor(Date.now() / 1000);
-  const e = rateLimitStore[key];
-  if (!e || now - e.windowStart > win) {
-    rateLimitStore[key] = { count: 1, windowStart: now };
-    return { allowed: true, remaining: max - 1, max };
+
+  let store;
+  try {
+    store = limitStore();
+  } catch {
+    // Blobs unavailable (local dev, misconfigured deploy) — fail open rather
+    // than locking every user out of a free product.
+    return { allowed: true, remaining: max - 1, max, degraded: true };
   }
-  if (e.count >= max) {
-    return { allowed: false, remaining: 0, max, resetIn: e.windowStart + win - now };
+
+  let entry = null;
+  try {
+    entry = await store.get(key, { type: 'json' });
+  } catch { /* treat a read failure as a fresh window */ }
+
+  if (!entry || typeof entry.windowStart !== 'number' || now - entry.windowStart > win) {
+    entry = { count: 1, windowStart: now };
+  } else if (entry.count >= max) {
+    return { allowed: false, remaining: 0, max, resetIn: entry.windowStart + win - now };
+  } else {
+    entry.count += 1;
   }
-  e.count += 1;
-  return { allowed: true, remaining: max - e.count, max };
+
+  try {
+    await store.setJSON(key, entry);
+  } catch {
+    // The count is spent either way; letting the request through is kinder
+    // than failing it over a bookkeeping error.
+  }
+
+  return { allowed: true, remaining: Math.max(0, max - entry.count), max };
 }
 
 function sanitizeInput(text) {
@@ -238,12 +262,85 @@ const KEY_HINTS = {
   CEREBRAS_API_KEY:    ['cerebras', ['csk-']],
   MISTRAL_API_KEY:     ['mistral', []],
   OPENROUTER_API_KEY:  ['openrouter', ['sk-or-']],
-  GITHUB_MODELS_TOKEN: ['github', ['ghp_', 'github_pat_']],
 };
 
 function keyFor(envName) {
   const [word, prefixes] = KEY_HINTS[envName] || [envName.toLowerCase(), []];
   return resolveKey(envName, word, prefixes);
+}
+
+// ── System prompt ────────────────────────────────────────────────────
+//
+// Owned by the server. The client used to send `system` and we forwarded it,
+// which meant anyone posting to this endpoint could replace the instructions
+// wholesale — dropping the safety rules, the output format, or the instruction
+// to prefer verified inventory. The client now sends only what it legitimately
+// knows: store, trade, location, and the matched inventory rows.
+
+const STORES = {
+  hd: { name: 'Home Depot', aisles: '1-45' },
+  lw: { name: "Lowe's",     aisles: '1-40' },
+  az: { name: 'AutoZone',   aisles: '1-12' },
+};
+
+const TRADE_LABELS = {
+  plumbing:  'Plumbing',
+  hvac:      'Basic HVAC',
+  carpentry: 'Carpentry / Framing / Drywall',
+  auto:      'Automotive',
+  appliance: 'Appliance repair',
+};
+
+function formatInventory(rows) {
+  if (!Array.isArray(rows) || !rows.length) return '';
+  const lines = rows.slice(0, 60).map(r => {
+    const name  = String(r.name  || '').slice(0, 90);
+    const spec  = String(r.spec  || '').slice(0, 60);
+    const aisle = String(r.aisle || '').slice(0, 30);
+    const price = r.price != null ? ` | ~$${Number(r.price).toFixed(2)}` : '';
+    return `- ${name}${spec ? ' | ' + spec : ''} | ${aisle}${price}`;
+  });
+  return `\nVERIFIED STORE INVENTORY (use these first — real aisles and prices):\n${lines.join('\n')}\n`;
+}
+
+function buildSystemPrompt({ storeKey, trade, city, region, inventoryRows }) {
+  const store = STORES[storeKey] || STORES.hd;
+  const loc = city
+    ? `The technician is in ${String(city).slice(0, 60)}${region ? ', ' + String(region).slice(0, 40) : ''}.`
+    : 'Location unknown — use general North American product availability.';
+  const inventory = formatInventory(inventoryRows);
+  const tradeLabel = TRADE_LABELS[trade] || 'General trade work';
+
+  return `You are a trade materials expert assistant for ${store.name} (aisles ${store.aisles}).
+${loc}
+
+The technician's trade category: ${tradeLabel}.
+${inventory}
+Your ONLY job is to produce a complete, precise material list so the technician can complete this job in ONE trip with ZERO return visits.
+
+Rules:
+1. Include EVERY item needed — fasteners, fittings, tape, primer, accessories. Never leave anything out.
+2. Be specific on sizes, grades, and specs. Wrong spec = wasted trip.
+3. ${inventory
+      ? 'Prioritize items from the VERIFIED STORE INVENTORY above — use the exact aisle and price shown. If an item is not in the inventory, add it anyway and mark the name with (*) to flag it as estimated.'
+      : `Use realistic ${store.name} product names and aisle numbers.`}
+4. Flag any permit, code, or safety concern in NOTES.
+5. Suggest a 10-15% overage on consumables (screws, fasteners, tape, caulk).
+6. List the tools required in the TOOLS section.
+7. If measurements are provided, calculate EXACT quantities and round up to sellable pack sizes.
+8. Never invent an aisle number you are not confident about — write "Ask associate" instead.
+
+Respond ONLY in this exact format — no extra text outside the tags:
+
+NOTES: <one or two sentences about code/permit/safety concerns, or "None.">
+
+TOOLS:
+- <Tool name> | <Why it's needed / spec>
+/TOOLS
+
+MATERIALS:
+- <Item name> | <Exact spec / size / grade> | <Quantity + unit> | Aisle <number> | ~$<price>
+/MATERIALS`;
 }
 
 // ── Agent registry ───────────────────────────────────────────────────
@@ -384,11 +481,6 @@ const AGENTS = [
     roles: ['opinion'],
     call: openAICompatible({ url: 'https://openrouter.ai/api/v1/chat/completions',
       keyEnv: 'OPENROUTER_API_KEY', model: 'meta-llama/llama-3.3-70b-instruct:free' }) },
-
-  { id: 'github', name: 'GitHub Models', env: 'GITHUB_MODELS_TOKEN', cost: 'free', vision: true,
-    roles: ['opinion'],
-    call: openAICompatible({ url: 'https://models.inference.ai.azure.com/chat/completions',
-      keyEnv: 'GITHUB_MODELS_TOKEN', model: 'gpt-4o-mini' }) },
 
   // ---- Paid tier: requires ENABLE_PAID_COUNCIL=true AND a plan allowing it ----
   { id: 'claude', name: 'Claude', env: 'ANTHROPIC_API_KEY', cost: 'paid', vision: true,
@@ -624,7 +716,7 @@ exports.handler = async (event) => {
 
   const tier = await resolveTier(body, event);
   const plan = planFor(tier);
-  const rl = checkRateLimit(getRateLimitKey(event, tier), tier);
+  const rl = await checkRateLimit(getRateLimitKey(event, tier), tier);
   if (!rl.allowed) {
     const hrs = Math.ceil(rl.resetIn / 3600);
     return {
@@ -639,7 +731,14 @@ exports.handler = async (event) => {
     };
   }
 
-  const system = typeof body.system === 'string' ? body.system.slice(0, 16000) : '';
+  // Built here, never taken from the request.
+  const system = buildSystemPrompt({
+    storeKey:      body.store,
+    trade:         body.trade,
+    city:          body.city,
+    region:        body.region,
+    inventoryRows: body.inventory,
+  });
   const prompt = sanitizeInput(body.prompt || '');
   const maxTokens = Math.min(Number(body.max_tokens) || 1600, plan.maxTokens);
   const verifiedAisles = Array.isArray(body.verifiedAisles) ? body.verifiedAisles.slice(0, 60) : null;
@@ -704,7 +803,7 @@ exports.handler = async (event) => {
             maxTokens,
             image
           ),
-          JUDGE_TIMEOUT_MS,
+          Math.max(JUDGE_MIN_MS, msLeft() - 300),
           'Judge'
         );
         const parsed = parseResponse(verdict);

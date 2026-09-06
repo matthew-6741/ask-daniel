@@ -2839,13 +2839,18 @@ async function fetchConsensus(prompt, storeKey) {
   const response = await fetchOrExplain(CONSENSUS_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    // The server owns the system prompt now — we send only the facts it needs.
     body: JSON.stringify({
-      tier: currentPlan,
-      system,
+      tier:   currentPlan,
       prompt,
+      store:  storeKey || currentStore,
+      trade:  currentTrade,
+      city:   userLocation ? userLocation.city : undefined,
+      region: userLocation ? userLocation.region : undefined,
       max_tokens: MAX_TOKENS,
       image: jobPhoto ? { base64: jobPhoto.base64, mediaType: jobPhoto.mediaType } : null,
-      // Send the verified rows so the server trusts real aisles over model guesses
+      // Matched inventory, so the server can prefer real aisles over guesses
+      inventory: matched.map(p => ({ name: p.name, spec: p.spec, aisle: `Aisle ${p.aisle}`, price: p.price })),
       verifiedAisles: matched.map(p => ({ name: p.name, aisle: `Aisle ${p.aisle}` })),
     }),
   });

@@ -1,24 +1,3 @@
-# macOS
-.DS_Store
-
-# Secrets — never commit these
-.env
-.env.*
-!.env.example
-
-# Netlify
-.netlify/
-
-# Dependencies
 node_modules/
-
-# Editor
-.vscode/
-.idea/
-
-# Logs
-*.log
-npm-debug.log*
-
-# Internal working notes — kept local, not published
-CLAUDE.md
+.netlify/
+.DS_Store

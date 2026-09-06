@@ -19,30 +19,56 @@ const LIMITS = {
   pro:  { max: 40, win: 3600 },
 };
 
-const rateLimitStore = {};
+// ── Rate limiting ────────────────────────────────────────────────────
+//
+// Counters live in Netlify Blobs rather than module memory. The in-memory
+// version reset on every cold start, so the "5 free council runs per day" cap
+// was really "5 per warm container" — anyone could wait out a restart, and the
+// number shown in the UI was fiction.
+//
+// Blobs is eventually consistent, so two requests landing in the same instant
+// can both read the same count. That is an acceptable overshoot for abuse
+// deterrence; it is not a billing meter.
+const { getStore } = require('@netlify/blobs');
 
-function getRateLimitKey(event, tier) {
-  const ip =
-    event.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
-    event.headers['client-ip'] ||
-    'unknown';
-  return `${tier}:${ip}`;
+function limitStore() {
+  return getStore({ name: 'rate-limits', consistency: 'strong' });
 }
 
-function checkRateLimit(key, tier) {
+async function checkRateLimit(key, tier) {
   const { max, win } = LIMITS[tier] || LIMITS.free;
   const now = Math.floor(Date.now() / 1000);
-  const entry = rateLimitStore[key];
 
-  if (!entry || now - entry.windowStart > win) {
-    rateLimitStore[key] = { count: 1, windowStart: now };
-    return { allowed: true, remaining: max - 1 };
+  let store;
+  try {
+    store = limitStore();
+  } catch {
+    // Blobs unavailable (local dev, misconfigured deploy) — fail open rather
+    // than locking every user out of a free product.
+    return { allowed: true, remaining: max - 1, max, degraded: true };
   }
-  if (entry.count >= max) {
-    return { allowed: false, remaining: 0, resetIn: entry.windowStart + win - now };
+
+  let entry = null;
+  try {
+    entry = await store.get(key, { type: 'json' });
+  } catch { /* treat a read failure as a fresh window */ }
+
+  if (!entry || typeof entry.windowStart !== 'number' || now - entry.windowStart > win) {
+    entry = { count: 1, windowStart: now };
+  } else if (entry.count >= max) {
+    return { allowed: false, remaining: 0, max, resetIn: entry.windowStart + win - now };
+  } else {
+    entry.count += 1;
   }
-  entry.count += 1;
-  return { allowed: true, remaining: max - entry.count };
+
+  try {
+    await store.setJSON(key, entry);
+  } catch {
+    // The count is spent either way; letting the request through is kinder
+    // than failing it over a bookkeeping error.
+  }
+
+  return { allowed: true, remaining: Math.max(0, max - entry.count), max };
 }
 
 function sanitizeInput(text) {
@@ -327,7 +353,7 @@ exports.handler = async (event) => {
 
   const tier = resolveTier(body);
 
-  const rl = checkRateLimit(getRateLimitKey(event, tier), tier);
+  const rl = await checkRateLimit(getRateLimitKey(event, tier), tier);
   if (!rl.allowed) {
     const mins = Math.ceil(rl.resetIn / 60);
     return {
