@@ -93,15 +93,34 @@ function resolveKey(canonical, providerWord, valuePrefixes = []) {
   return null;
 }
 
+// Google issues two key formats. "AIza..." is the older standard API key,
+// retired as of September 2026; "AQ..." is the newer auth key that AI Studio
+// now creates by default. Accept both — rejecting AQ. keys would turn a valid
+// credential away.
 const KEY_HINTS = {
   GROQ_API_KEY:      ['groq',      ['gsk_']],
-  GEMINI_API_KEY:    ['gemini',    ['AIza']],
+  GEMINI_API_KEY:    ['gemini',    ['AIza', 'AQ.']],
   ANTHROPIC_API_KEY: ['anthropic', ['sk-ant-']],
 };
 
 function keyFor(envName) {
   const [word, prefixes] = KEY_HINTS[envName] || [envName.toLowerCase(), []];
   return resolveKey(envName, word, prefixes);
+}
+
+// A model that hangs rather than erroring would otherwise consume the whole
+// function budget and return a platform timeout — which reaches the user as a
+// raw Lambda error, not a message. Each attempt gets its own ceiling, and the
+// loop as a whole gets one too, so a slow model costs a retry rather than the
+// request.
+const PER_MODEL_TIMEOUT_MS = 8000;   // a hang should cost one retry, not the request
+const TOTAL_TIMEOUT_MS     = 25000;   // Netlify kills the function at 30s
+
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, rej) => setTimeout(() => rej(new Error(`${label} timed out after ${ms}ms`)), ms)),
+  ]);
 }
 
 // ── Provider calls. Each returns raw text in the NOTES/TOOLS/MATERIALS format.
@@ -121,21 +140,27 @@ const GROQ_TEXT_MODELS = [
 ];
 // Groq lists no vision model in production right now, so photo jobs fall back
 // to describing the text prompt only. Gemini handles photos when configured.
+// Groq lists no vision model in production. Scout is kept as a single
+// optimistic attempt for accounts that have it; there is no text fallback,
+// because a text model handed a photo answers confidently about nothing.
 const GROQ_VISION_MODELS = [
   'meta-llama/llama-4-scout-17b-16e-instruct',
-  'llama-3.1-8b-instant',
 ];
 
 async function callGroq(system, prompt, maxTokens, image) {
   const candidates = image ? GROQ_VISION_MODELS : GROQ_TEXT_MODELS;
+  const deadline = Date.now() + TOTAL_TIMEOUT_MS;
   let lastErr = null;
   for (const model of candidates) {
+    if (Date.now() > deadline) break;
     try {
-      return await groqOnce(model, system, prompt, maxTokens, image);
+      return await withTimeout(
+        groqOnce(model, system, prompt, maxTokens, image),
+        Math.min(PER_MODEL_TIMEOUT_MS, deadline - Date.now()), model);
     } catch (e) {
       lastErr = e;
       // Only a missing/forbidden model is worth retrying; anything else is real.
-      if (!/does not exist|do not have access|decommissioned|not found|empty content/i.test(e.message)) throw e;
+      if (!/does not exist|do not have access|decommissioned|empty content|no longer available|not found|does not exist|not supported|timed out|high demand|overloaded|RESOURCE_EXHAUSTED|try again|unavailable|rate limit|429|503/i.test(e.message)) throw e;
     }
   }
   throw lastErr || new Error('No usable Groq model');
@@ -183,11 +208,41 @@ async function groqOnce(model, system, prompt, maxTokens, image) {
 
 let lastGroqModel = null;
 
+// Google retires Gemini model names too. Same approach as Groq: try a list.
+// Order is by measured behaviour, not version number. gemini-3.6-flash hangs
+// on this key — it burned the full 12s per-model timeout on every request
+// before falling through, making photo jobs take 17s instead of 5s. Known-good
+// first; the newer name stays last in case access changes.
+// gemini-3.6-flash is dropped, not reordered: it hung on every request until
+// the per-model timeout fired, so keeping it as a fallback only added 12s to
+// the failure path without ever succeeding.
+const GEMINI_MODELS = [
+  'gemini-2.5-flash',
+  'gemini-flash-latest',
+];
+
 async function callGemini(system, prompt, maxTokens, image) {
+  const deadline = Date.now() + TOTAL_TIMEOUT_MS;
+  let lastErr = null;
+  for (const model of GEMINI_MODELS) {
+    if (Date.now() > deadline) break;
+    try {
+      return await withTimeout(
+        geminiOnce(model, system, prompt, maxTokens, image),
+        Math.min(PER_MODEL_TIMEOUT_MS, deadline - Date.now()), model);
+    } catch (e) {
+      lastErr = e;
+      if (!/no longer available|not found|does not exist|not supported|timed out|high demand|overloaded|RESOURCE_EXHAUSTED|try again|unavailable|rate limit|429|503/i.test(e.message)) throw e;
+    }
+  }
+  throw lastErr || new Error('No usable Gemini model');
+}
+
+async function geminiOnce(model, system, prompt, maxTokens, image) {
   const parts = [{ text: prompt }];
   if (image) parts.push({ inlineData: { mimeType: image.mediaType, data: image.base64 } });
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${keyFor('GEMINI_API_KEY')}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${keyFor('GEMINI_API_KEY')}`;
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -234,13 +289,16 @@ async function callClaude(system, prompt, maxTokens, image) {
 // Gemini leads the free chain when a photo is attached: its vision support is
 // on the same free tier, whereas Groq's vision model is a separate preview.
 function pickProvider(tier, hasImage) {
-  const groq   = { name: 'Groq',   env: 'GROQ_API_KEY',      call: callGroq };
-  const gemini = { name: 'Gemini', env: 'GEMINI_API_KEY',    call: callGemini };
-  const claude = { name: 'Claude', env: 'ANTHROPIC_API_KEY', call: callClaude };
+  // `vision` reflects what the provider can actually do today. Groq lists no
+  // vision model in production, so handing it a photo produces a confident
+  // answer about an image it never received — worse than refusing.
+  const groq   = { name: 'Groq',   env: 'GROQ_API_KEY',      call: callGroq,   vision: false };
+  const gemini = { name: 'Gemini', env: 'GEMINI_API_KEY',    call: callGemini, vision: true  };
+  const claude = { name: 'Claude', env: 'ANTHROPIC_API_KEY', call: callClaude, vision: true  };
 
-  const freeChain = hasImage ? [gemini, groq] : [groq, gemini];
+  const freeChain = hasImage ? [gemini] : [groq, gemini];  // only Gemini sees
   const chain = tier === 'pro' ? [claude, ...freeChain] : freeChain;
-  return chain.find(p => keyFor(p.env)) || null;
+  return chain.find(p => keyFor(p.env) && (!hasImage || p.vision)) || null;
 }
 
 // Resolve the caller's plan.
@@ -302,10 +360,16 @@ exports.handler = async (event) => {
 
   const provider = pickProvider(tier, !!image);
   if (!provider) {
+    // A photo needs a vision-capable provider. Saying "no provider configured"
+    // when text works fine would send someone hunting the wrong problem.
+    const textProvider = pickProvider(tier, false);
+    const msg = image && textProvider
+      ? 'Photo analysis needs a vision-capable model, which is not configured yet. Describe the job in words instead, or add a GEMINI_API_KEY.'
+      : 'No AI provider configured on the server.';
     return {
-      statusCode: 500,
+      statusCode: image && textProvider ? 400 : 500,
       headers: corsHeaders,
-      body: JSON.stringify({ error: 'No AI provider configured on the server.' }),
+      body: JSON.stringify({ error: msg, needsVisionProvider: !!(image && textProvider) }),
     };
   }
 

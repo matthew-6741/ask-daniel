@@ -18,8 +18,20 @@
 // Env: GEMINI_API_KEY, GROQ_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY,
 //      XAI_API_KEY, ANTHROPIC_MODEL, ENABLE_PAID_COUNCIL
 
+// Order is by measured behaviour, not version number. gemini-3.6-flash hangs
+// on this key — it burned the full 12s per-model timeout on every request
+// before falling through, making photo jobs take 17s instead of 5s. Known-good
+// first; the newer name stays last in case access changes.
+// gemini-3.6-flash is dropped, not reordered: it hung on every request until
+// the per-model timeout fired, so keeping it as a fallback only added 12s to
+// the failure path without ever succeeding.
+const GEMINI_MODELS = [
+  'gemini-2.5-flash',
+  'gemini-flash-latest',
+];
+
 const MODELS = {
-  gemini:     'gemini-2.5-flash',
+  gemini:     'gemini-3.6-flash',
   openai:     'gpt-4o',
   xai:        'grok-2-vision-1212',
 };
@@ -39,7 +51,10 @@ const GROQ_VISION_MODELS = [
   'llama-3.1-8b-instant',
 ];
 
-const RETRYABLE = /does not exist|do not have access|decommissioned|not found|empty content/i;
+// Transient capacity errors are retryable too — a provider saying "high demand"
+// means try elsewhere, not give up. Treating them as fatal was collapsing the
+// council to a single opinion whenever Gemini was busy.
+const RETRYABLE = /does not exist|do not have access|decommissioned|empty content|no longer available|not found|does not exist|not supported|timed out|high demand|overloaded|RESOURCE_EXHAUSTED|try again|unavailable|rate limit|429|503/i;
 
 // ── Plan configuration ───────────────────────────────────────────────
 // Council review itself is available to EVERYONE. Plans differ only in how
@@ -101,11 +116,20 @@ async function verifyProToken(/* idToken */) {
   return false;
 }
 
-// Per-provider timeout. Netlify kills synchronous functions around 10s, and
-// Promise.allSettled waits for the slowest — without this one hung provider
-// takes the whole request down even though the others already answered.
-const STAGE_TIMEOUT_MS = 7000;
-const JUDGE_TIMEOUT_MS = 8000;
+// Netlify kills synchronous functions at ~10s on the free plan, and the council
+// is two sequential stages: opinions in parallel, then the judge. Fixed
+// per-stage timeouts of 7s + 8s could reach 15s and get the whole request
+// killed, losing work that had already completed.
+//
+// So the stages share one budget. Opinions get most of it; the judge only runs
+// if enough time remains, and is skipped rather than risking the response.
+// Netlify's function ceiling is 30s, not the 10s assumed when these were first
+// set. The old 5.5s opinion window was cutting Gemini off mid-answer and
+// collapsing the council to a single drafter on every run.
+const TOTAL_BUDGET_MS   = 24000;  // leaves ~6s of headroom under the 30s kill
+const OPINION_BUDGET_MS = 12000;  // Gemini answers in 2-3s but spikes higher
+const JUDGE_MIN_MS      = 4000;
+const STAGE_TIMEOUT_MS  = OPINION_BUDGET_MS;
 
 const rateLimitStore = {};
 
@@ -201,8 +225,12 @@ function resolveKey(canonical, providerWord, valuePrefixes = []) {
   return null;
 }
 
+// Google issues two key formats. "AIza..." is the older standard API key,
+// retired as of September 2026; "AQ..." is the newer auth key that AI Studio
+// now creates by default. Accept both — rejecting AQ. keys would turn a valid
+// credential away.
 const KEY_HINTS = {
-  GEMINI_API_KEY:      ['gemini', ['AIza']],
+  GEMINI_API_KEY:      ['gemini', ['AIza', 'AQ.']],
   GROQ_API_KEY:        ['groq',   ['gsk_']],
   ANTHROPIC_API_KEY:   ['anthropic', ['sk-ant-']],
   OPENAI_API_KEY:      ['openai', ['sk-proj-']],
@@ -282,9 +310,21 @@ async function callGroq(system, prompt, maxTokens, image) {
 }
 
 async function callGemini(system, prompt, maxTokens, image) {
+  let lastErr = null;
+  for (const model of GEMINI_MODELS) {
+    try { return await geminiOnce(model, system, prompt, maxTokens, image); }
+    catch (e) {
+      lastErr = e;
+      if (!RETRYABLE.test(e.message) && !/no longer available|not supported/i.test(e.message)) throw e;
+    }
+  }
+  throw lastErr || new Error('No usable Gemini model');
+}
+
+async function geminiOnce(model, system, prompt, maxTokens, image) {
   const parts = [{ text: prompt }];
   if (image) parts.push({ inlineData: { mimeType: image.mediaType, data: image.base64 } });
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODELS.gemini}:generateContent?key=${keyFor('GEMINI_API_KEY')}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${keyFor('GEMINI_API_KEY')}`;
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -568,6 +608,8 @@ MATERIALS:
 // ── Handler ──────────────────────────────────────────────────────────
 
 exports.handler = async (event) => {
+  const startedAt = Date.now();
+  const msLeft = () => TOTAL_BUDGET_MS - (Date.now() - startedAt);
   const cors = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
@@ -646,7 +688,11 @@ exports.handler = async (event) => {
   let judged = false;
   let judgeName = null;
 
-  if (drafts.length > 1) {
+  const timeForJudge = msLeft();
+  if (drafts.length > 1 && timeForJudge < JUDGE_MIN_MS) {
+    status.push({ provider: 'judge', ok: false, stage: 'judge',
+      error: `skipped — only ${Math.max(0, timeForJudge)}ms left of the ${TOTAL_BUDGET_MS}ms budget` });
+  } else if (drafts.length > 1) {
     const judge = pickJudge(tier, !!image, drafts.map(d => d.id));
     if (judge) {
       judgeName = judge.name;
@@ -697,6 +743,7 @@ exports.handler = async (event) => {
       agentsAvailable: eligibleAgents(tier, { role: 'opinion', hasImage: !!image }).map(a => a.name),
       providers: status,
       apiCalls: drafts.length + (judged ? 1 : 0),
+      elapsedMs: Date.now() - startedAt,
       tier,
       remaining: rl.remaining,
       limit: rl.max,
