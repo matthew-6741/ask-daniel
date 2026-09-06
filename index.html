@@ -1362,7 +1362,7 @@ textarea::placeholder { color: #b0b0a8; }
   <div class="gate-card">
     <div class="gate-logo">AD</div>
     <div class="gate-title">Ask Daniel</div>
-    <div class="gate-badge">Beta Access</div>
+    <div class="gate-badge">Early Access</div>
     <div class="gate-sub">This build is invite-only.<br>Enter your access code to continue.</div>
     <div class="gate-input-wrap">
       <input
@@ -3269,14 +3269,25 @@ function clearAll() {
 }
 
 // ── Access gate ──
-// Change ACCESS_CODE below to whatever you want to give testers.
-// These must be declared before init() runs — init() reads ACCESS_SESSION.
+// The app is open to everyone. Flip REQUIRE_ACCESS_CODE back to true to
+// restore the invite-only gate — the screen and its logic are left intact so
+// this is a one-word change, not a rebuild.
+//
+// Note the code was never a security control: it lives in client-side
+// JavaScript, so anyone could read it in View Source. It was a speed bump.
+const REQUIRE_ACCESS_CODE = false;
 const ACCESS_CODE    = 'TRADE2026';
 const ACCESS_SESSION = 'diagnostech_access';
 
 (function gateInit() {
+  const gate = document.getElementById('accessGate');
+  if (!REQUIRE_ACCESS_CODE) {
+    gate.style.display = 'none';
+    sessionStorage.setItem(ACCESS_SESSION, 'granted');  // let init() proceed
+    return;
+  }
   if (sessionStorage.getItem(ACCESS_SESSION) === 'granted') {
-    document.getElementById('accessGate').style.display = 'none';
+    gate.style.display = 'none';
     // authScreen stays hidden until Firebase resolves auth state in init()
     // or shows immediately if Firebase isn't configured
   } else {
