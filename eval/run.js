@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Ask Daniel evaluation harness.
+ * Ask Danny evaluation harness.
  *
  * Runs the job set against the live API and writes a CSV for a tradesperson to
  * grade. The scoring the machine can do is deliberately narrow: whether an
@@ -27,7 +27,9 @@ const opt = (flag, fallback) => {
 
 const TRADE     = opt('--trade', null);
 const LIMIT     = parseInt(opt('--limit', '0'), 10);
-const ENDPOINT  = opt('--endpoint', 'ai');
+// The app calls /api/council, so that is what the eval must measure. Defaulting
+// to the proxy graded a path no user takes, and produced 15 jobs of zeros.
+const ENDPOINT  = opt('--endpoint', 'council');
 const DELAY_MS  = parseInt(opt('--delay', '1500'), 10);
 
 const { jobs } = JSON.parse(fs.readFileSync(path.join(__dirname, 'jobs.json'), 'utf8'));
@@ -69,7 +71,8 @@ async function runJob(job) {
     prompt: job.text,
     store: 'hd',
     trade: job.trade,
-    max_tokens: 1100,
+    // 1100 truncates the JSON on longer lists; the plan cap is 1600.
+    max_tokens: 1600,
   };
 
   let res, data;
@@ -111,7 +114,7 @@ function csvCell(v) {
 }
 
 (async () => {
-  console.log(`Ask Daniel eval — ${queue.length} jobs against ${BASE}/api/${ENDPOINT}\n`);
+  console.log(`Ask Danny eval — ${queue.length} jobs against ${BASE}/api/${ENDPOINT}\n`);
   const results = [];
 
   for (let i = 0; i < queue.length; i++) {
@@ -135,13 +138,16 @@ function csvCell(v) {
   const withEssentials = ok.filter(r => (r.job.expectEssential || []).length);
   const fullyCovered = withEssentials.filter(r => !r.missing.length);
   const traps = results.filter(r => r.job.trap);
-  const trapsFlagged = traps.filter(r => r.safetyFlagged || r.error);
+  // An errored request is not a handled safety case. Counting errors as passes
+  // reported 12/13 on a run where most traps never reached a provider.
+  const trapsAnswered = traps.filter(r => !r.error);
+  const trapsFlagged = trapsAnswered.filter(r => r.safetyFlagged);
 
   console.log('\n─────────────────────────────────────────────');
   console.log(`  completed          ${ok.length}/${results.length}`);
   console.log(`  essentials covered ${fullyCovered.length}/${withEssentials.length} jobs`);
   console.log(`  aisles verified    ${ok.reduce((n, r) => n + r.verifiedCount, 0)}/${ok.reduce((n, r) => n + r.itemCount, 0)} items`);
-  console.log(`  safety/trap jobs   ${trapsFlagged.length}/${traps.length} handled`);
+  console.log(`  safety/trap jobs   ${trapsFlagged.length}/${trapsAnswered.length} flagged (${traps.length - trapsAnswered.length} never answered)`);
   console.log(`  median latency     ${(() => {
     const t = ok.map(r => r.ms).sort((a, b) => a - b);
     return t.length ? (t[Math.floor(t.length / 2)] / 1000).toFixed(1) + 's' : 'n/a';
