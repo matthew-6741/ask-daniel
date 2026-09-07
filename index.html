@@ -1542,7 +1542,7 @@ button .ico:only-child { margin-right: 0; }
       <li><strong>What you type or photograph is sent to an AI company</strong> (Anthropic, Google, OpenAI or Groq) to build your list. Don't include personal or sensitive details.</li>
       <li><strong>Location is optional</strong> and only used to match regional stock. Decline it and everything still works.</li>
       <li><strong>As a guest, nothing is stored on our servers</strong> — your history stays in this browser. Make an account and it's saved to Google Firebase instead.</li>
-      <li><strong>Anonymous usage stats</strong> are recorded via Google Analytics with your IP anonymised. We don't sell data and don't run ads.</li>
+      <li><strong>Anonymous usage stats</strong> are only collected if you accept analytics in the cookie banner. Decline and nothing is sent to Google. Either way we don't sell data and don't run ads.</li>
     </ul>
 
     <label class="ack-check" for="ackBox">
@@ -1844,6 +1844,12 @@ button .ico:only-child { margin-right: 0; }
           data-netlify="true" netlify-honeypot="bot-field"
           onsubmit="return submitUpdates(event)">
       <input type="hidden" name="form-name" value="updates">
+      <!-- Netlify only records fields that exist in the deployed HTML, so the
+           consent wording has to be declared here or it is silently dropped —
+           and a subscriber record with no evidence of consent is the one thing
+           this list cannot afford. -->
+      <input type="hidden" name="consent" id="updatesConsentText" value="">
+      <input type="hidden" name="source" value="site-footer">
       <p hidden><label>Leave this empty: <input name="bot-field"></label></p>
       <input type="email" id="updatesEmail" name="email" placeholder="you@example.com"
              autocomplete="email" maxlength="254" required>
@@ -2451,6 +2457,11 @@ document.addEventListener('DOMContentLoaded', initCookieBanner);
 /* ── Update list ───────────────────────────────────────────────────────────
    The consent box is required and starts unticked. The server checks it too —
    this is the courtesy check, not the enforcement. */
+// The exact wording someone agreed to, stored with their address either way.
+// Kept identical to CONSENT_TEXT in netlify/functions/updates.js.
+const CONSENT_TEXT =
+  'I want occasional emails about Ask Danny updates. I can unsubscribe any time.';
+
 // Netlify Forms takes a urlencoded POST to any path on the site, as long as
 // form-name matches a form present in the deployed HTML.
 async function postToNetlifyForms(email) {
@@ -2461,7 +2472,8 @@ async function postToNetlifyForms(email) {
       body: new URLSearchParams({
         'form-name': 'updates',
         email,
-        consent: 'I want occasional emails about Ask Danny updates. I can unsubscribe any time.',
+        consent: CONSENT_TEXT,
+        consentedAt: new Date().toISOString(),
         source: 'site-footer',
       }).toString(),
     });
@@ -2479,6 +2491,11 @@ async function submitUpdates(e) {
   const show = (text, cls) => { msg.textContent = text; msg.className = 'updates-msg show ' + cls; };
 
   if (!consent) return show('Please tick the box so we know you want these.', 'bad'), false;
+
+  // Filled only once the box is ticked. A hidden field with the consent text
+  // pre-populated would be evidence of a consent nobody gave.
+  const hidden = document.getElementById('updatesConsentText');
+  if (hidden) hidden.value = CONSENT_TEXT;
 
   btn.disabled = true;
   const original = btn.textContent;
