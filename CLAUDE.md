@@ -71,6 +71,26 @@ Latest commit: security hardening (proxy, CSP, rate limiting, Firestore rules)
 
 ## Deploying
 
+**Sync every site file first, not just the ones you edited.** The deploy folder
+is a separate copy, so anything not copied across is *removed from the live
+site* on the next deploy. This is not hypothetical: a deploy of only
+`index.html` and the functions took someone else's `cookies.html` off
+production (404) and dropped its footer link, because those files existed in
+git but had never been copied to the deploy folder.
+
+`git pull` before deploying, too. Another session pushed nine commits to this
+repo while work was in progress here, and deploying without merging them
+reverted their work on the live site.
+
+```bash
+cd ~/diagnostech-trade && git pull --no-edit
+for f in $(git ls-files | grep -E '\.(html|xml|txt|json)$' | grep -v eval/); do
+  cp "$f" ~/Desktop/diagnostechai-DEPLOY/"$f"
+done
+cp netlify/functions/*.js ~/Desktop/diagnostechai-DEPLOY/netlify/functions/
+```
+
+
 `netlify deploy --prod` fails with `JSONHTTPError: Forbidden` on this account —
 the upload succeeds (three 200s) and only the final publish call is refused.
 The publish API itself works, so deploy as a draft and then promote it:
