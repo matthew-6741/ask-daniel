@@ -2772,7 +2772,10 @@ async function fetchFromAPI(prompt, storeKey) {
       body: JSON.stringify({
         tier:       currentPlan,
         max_tokens: MAX_TOKENS,
-        system,
+        // No system prompt: the server owns it. Sending one from here was what
+        // made this endpoint usable as somebody else's free chatbot.
+        store:      storeKey || currentStore,
+        trade:      currentTrade,
         prompt,
         image: jobPhoto ? { base64: jobPhoto.base64, mediaType: jobPhoto.mediaType } : null,
       }),
