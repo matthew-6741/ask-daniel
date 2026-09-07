@@ -1168,7 +1168,10 @@ exports.handler = async (event) => {
   const ALLOWED_ORIGINS = [
     'https://diagnostechai.com',
     'https://www.diagnostechai.com',
-    'https://diagnostech.netlify.app',
+    // The Netlify subdomain follows the site name. It was renamed diagnostech
+    // -> ask-danny, and the old one now 404s; leaving it here would allow an
+    // origin nobody can reach while blocking the one people can.
+    'https://ask-danny.netlify.app',
     'http://localhost:3456',
   ];
   const origin = event.headers.origin || event.headers.Origin || '';

@@ -398,11 +398,24 @@ function resolveTier(body) {
   return body.tier === 'pro' ? 'pro' : 'free';
 }
 
+// Same list as ai-council.js. Duplicated because esbuild bundles each function
+// separately and a relative require across them does not survive it.
+const ALLOWED_ORIGINS = [
+  'https://diagnostechai.com',
+  'https://www.diagnostechai.com',
+  'https://ask-danny.netlify.app',
+];
+
 exports.handler = async (event) => {
+  // This was '*', so any website could call this endpoint from a browser and
+  // spend our provider quota. The council never allowed that; the fallback
+  // path did.
+  const origin = event.headers.origin || event.headers.Origin || '';
   const corsHeaders = {
-    'Access-Control-Allow-Origin':  '*',
+    'Access-Control-Allow-Origin':  ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0],
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Vary': 'Origin',
   };
 
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: corsHeaders, body: '' };

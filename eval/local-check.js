@@ -376,6 +376,29 @@ const TINY_JPEG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z
   }
 
 
+
+  {
+    // Both endpoints must answer the site's own origins and no one else's.
+    for (const fn of ['ai-council.js', 'ai-proxy.js']) {
+      const m = makeFetch({});
+      const { handler } = load(fn, m.fetch);
+      const good = await handler(evt({ tier: 'free', prompt: 'leaking p-trap', store: 'hd', trade: 'plumbing' },
+                                     'https://ask-danny.netlify.app'));
+      ok(`cors: ${fn} allows the netlify subdomain`,
+         good.headers['Access-Control-Allow-Origin'] === 'https://ask-danny.netlify.app',
+         good.headers['Access-Control-Allow-Origin']);
+
+      const m2 = makeFetch({});
+      const { handler: h2 } = load(fn, m2.fetch);
+      const bad = await h2(evt({ tier: 'free', prompt: 'leaking p-trap', store: 'hd', trade: 'plumbing' },
+                               'https://evil.example.com'));
+      ok(`cors: ${fn} does not echo an unknown origin`,
+         bad.headers['Access-Control-Allow-Origin'] !== 'https://evil.example.com',
+         bad.headers['Access-Control-Allow-Origin']);
+    }
+  }
+
+
   console.log('─────────────────────────────────────────────');
   console.log(`  ${pass} passed, ${fail} failed`);
   if (failures.length) {
