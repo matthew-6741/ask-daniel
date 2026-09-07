@@ -69,6 +69,35 @@ Paste `firestore.rules` into Firebase Console → Firestore → Rules tab.
 Repo at `/Users/sanchez/diagnostech-trade/` (branch: main)
 Latest commit: security hardening (proxy, CSP, rate limiting, Firestore rules)
 
+## Netlify Blobs is not configured (rate limiting is failing open)
+
+`getStore()` throws `MissingBlobsEnvironmentError` in production. Netlify
+injects the Blobs environment during its own build; this site is deployed from
+the CLI, which does not. Every caller catches and carries on, so **persistent
+rate limiting has never actually enforced anything** — the free-tier 5/day cap
+is not being applied, and the video-evidence cache never stored a thing. It
+looked healthy because the council still returns a `remaining` count; that
+count just never decrements.
+
+Diagnose it any time with:
+
+```bash
+cd ~/Desktop/diagnostechai-DEPLOY
+T=$(netlify env:get ADMIN_TOKEN)
+curl -s "https://diagnostechai.com/api/subscribers?diag=1" -H "x-admin-token: $T"
+```
+
+The functions already fall back to configuring Blobs by hand from `SITE_ID`
+plus a token. `SITE_ID` is provided by the runtime; the token is not.
+`NETLIFY_FUNCTIONS_TOKEN` is present but Blobs rejects it with a 401. **To fix,
+set `NETLIFY_BLOBS_TOKEN` to a Netlify personal access token** (User settings →
+Applications → New access token), and everything starts working with no code
+change.
+
+The better long-term fix is to connect the GitHub repo to Netlify for CI
+deploys, which configures Blobs automatically and also avoids the publish
+workaround below.
+
 ## Deploying
 
 **Sync every site file first, not just the ones you edited.** The deploy folder

@@ -52,8 +52,26 @@ function corsFor(event) {
   };
 }
 
+// Netlify injects the Blobs environment during its own build. This site is
+// deployed from the CLI, which does not, so getStore() throws
+// MissingBlobsEnvironmentError and every write silently fails. The runtime does
+// still provide SITE_ID and NETLIFY_FUNCTIONS_TOKEN, which is enough to
+// configure it by hand.
+function blobStore(name, consistency = 'strong') {
+  try {
+    return getStore({ name, consistency });
+  } catch (e) {
+    const siteID = process.env.SITE_ID || process.env.NETLIFY_SITE_ID;
+    const token  = process.env.NETLIFY_BLOBS_TOKEN
+                || process.env.NETLIFY_FUNCTIONS_TOKEN
+                || process.env.NETLIFY_API_TOKEN;
+    if (!siteID || !token) throw e;
+    return getStore({ name, consistency, siteID, token });
+  }
+}
+
 function store() {
-  return getStore({ name: 'subscribers', consistency: 'strong' });
+  return blobStore('subscribers');
 }
 
 // The address itself is not the key. Blob keys turn up in logs and listings,
@@ -80,7 +98,7 @@ function ipOf(event) {
 
 async function rateLimited(event) {
   let s;
-  try { s = getStore({ name: 'rate-limits', consistency: 'strong' }); }
+  try { s = blobStore('rate-limits'); }
   catch { return false; }  // storage unavailable: do not lock people out
 
   const key = `subscribe:${ipOf(event)}`;
@@ -184,6 +202,32 @@ exports.handler = async (event) => {
     if (!admin || !given || given.length !== admin.length
         || !crypto.timingSafeEqual(Buffer.from(given), Buffer.from(admin))) {
       return json(404, { error: 'Not found' });
+    }
+
+    // ?diag=1 does a write/read round trip and reports the real error.
+    // Every other caller gets a generic message, which is right for users and
+    // useless for debugging — this is the way back in.
+    if ((event.queryStringParameters || {}).diag) {
+      const probe = { at: new Date().toISOString() };
+      const steps = {};
+      // Names only, never values. Which of these the runtime provides decides
+      // whether Blobs can self-configure or needs an explicit token.
+      steps.env = Object.keys(process.env)
+        .filter(k => /^(NETLIFY|SITE_ID|BLOB|DEPLOY|URL$|CONTEXT$)/i.test(k))
+        .sort().join(', ') || '(none)';
+      try {
+        const t = store();
+        steps.getStore = 'ok';
+        await t.setJSON('__diag', probe);
+        steps.write = 'ok';
+        const back = await t.get('__diag', { type: 'json' });
+        steps.read = back && back.at === probe.at ? 'ok' : `mismatch: ${JSON.stringify(back)}`;
+        const { blobs } = await t.list();
+        steps.list = `${blobs.length} keys`;
+      } catch (e) {
+        steps.error = `${e.name}: ${e.message}`.slice(0, 300);
+      }
+      return json(200, { diag: steps });
     }
 
     let s;

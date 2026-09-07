@@ -149,6 +149,26 @@ const STAGE_TIMEOUT_MS  = OPINION_BUDGET_MS;
 // deterrence; it is not a billing meter.
 const { getStore } = require('@netlify/blobs');
 
+// Netlify injects the Blobs environment during its own build. This site is
+// deployed from the CLI, which does not, so getStore() throws
+// MissingBlobsEnvironmentError — and because every caller here catches and
+// carries on, persistent rate limiting has been failing open silently rather
+// than enforcing anything. The runtime does provide SITE_ID, so all that is
+// missing is a token: set NETLIFY_BLOBS_TOKEN to a Netlify personal access
+// token and this starts working with no further change.
+function blobStore(name, consistency = 'strong') {
+  try {
+    return getStore({ name, consistency });
+  } catch (e) {
+    const siteID = process.env.SITE_ID || process.env.NETLIFY_SITE_ID;
+    const token  = process.env.NETLIFY_BLOBS_TOKEN
+                || process.env.NETLIFY_FUNCTIONS_TOKEN
+                || process.env.NETLIFY_API_TOKEN;
+    if (!siteID || !token) throw e;
+    return getStore({ name, consistency, siteID, token });
+  }
+}
+
 function getRateLimitKey(event, tier) {
   const ip =
     (event.headers['x-forwarded-for'] || '').split(',')[0].trim() ||
@@ -157,7 +177,7 @@ function getRateLimitKey(event, tier) {
 }
 
 function limitStore() {
-  return getStore({ name: 'rate-limits', consistency: 'strong' });
+  return blobStore('rate-limits');
 }
 
 async function checkRateLimit(key, tier) {
@@ -455,7 +475,7 @@ function videoCacheKey(trade, prompt) {
 let ytCooldownUntil = 0;
 
 function videoStore() {
-  return getStore({ name: 'video-evidence', consistency: 'eventual' });
+  return blobStore('video-evidence', 'eventual');
 }
 
 // The vocabulary is ours, built from the product database. Only terms that

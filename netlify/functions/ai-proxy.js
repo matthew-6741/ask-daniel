@@ -31,6 +31,21 @@ const LIMITS = {
 // deterrence; it is not a billing meter.
 const { getStore } = require('@netlify/blobs');
 
+// Same reason as ai-council.js: a CLI-deployed site gets no Blobs environment,
+// so this falls back to configuring it from SITE_ID plus a token.
+function blobStore(name, consistency = 'strong') {
+  try {
+    return getStore({ name, consistency });
+  } catch (e) {
+    const siteID = process.env.SITE_ID || process.env.NETLIFY_SITE_ID;
+    const token  = process.env.NETLIFY_BLOBS_TOKEN
+                || process.env.NETLIFY_FUNCTIONS_TOKEN
+                || process.env.NETLIFY_API_TOKEN;
+    if (!siteID || !token) throw e;
+    return getStore({ name, consistency, siteID, token });
+  }
+}
+
 function getRateLimitKey(event, tier) {
   const ip =
     (event.headers['x-forwarded-for'] || '').split(',')[0].trim() ||
@@ -39,7 +54,7 @@ function getRateLimitKey(event, tier) {
 }
 
 function limitStore() {
-  return getStore({ name: 'rate-limits', consistency: 'strong' });
+  return blobStore('rate-limits');
 }
 
 async function checkRateLimit(key, tier) {
