@@ -1,4 +1,4 @@
-# Ask Daniel — robots.txt
+# Ask Danny — robots.txt
 
 User-agent: *
 Allow: /
