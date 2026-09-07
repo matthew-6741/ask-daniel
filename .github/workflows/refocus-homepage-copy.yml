@@ -1,0 +1,62 @@
+name: De-genericize Ask Danny homepage copy
+
+on:
+  push:
+    paths:
+      - '.github/workflows/refocus-homepage-copy.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  rewrite-copy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Refocus public homepage language on trade work
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('index.html')
+          s = p.read_text()
+
+          replacements = [
+            ('<title>Ask Danny — AI Material List for Trades | Built by Matthew Sanchez, USC</title>', '<title>Ask Danny — One-Trip Material Lists for Trades | Built by Matthew Sanchez, USC</title>'),
+            ('<meta property="og:title"       content="Ask Danny — AI Material List for Trades | Matthew Sanchez, USC">', '<meta property="og:title"       content="Ask Danny — One-Trip Material Lists for Trades | Matthew Sanchez, USC">'),
+            ('<meta property="og:description" content="AI-powered one-trip material lists with exact aisle numbers for Home Depot, Lowe\'s, and AutoZone. Built by Matthew John Sanchez — USC student, nonprofit founder, first-gen Ecuadorian-American from Long Island, NY.">', '<meta property="og:description" content="Turn a repair job or photo into a one-trip material list with aisle guidance for Home Depot, Lowe\'s, and AutoZone.">'),
+            ('<meta name="twitter:title"       content="Ask Danny — AI for Trades | Matthew Sanchez, USC">', '<meta name="twitter:title"       content="Ask Danny — One-Trip Material Lists for Trades">'),
+            ('USC Class of 2028 studying Economics with a focus on AI and human-centered computing.', 'USC Class of 2028 studying Economics with a focus on human-centered technology.'),
+            ('"jobTitle": ["Student Entrepreneur", "Nonprofit Founder", "AI Developer"]', '"jobTitle": ["Student Entrepreneur", "Nonprofit Founder", "Product Developer"]'),
+            ('"Artificial Intelligence", "Machine Learning", "Human-Centered Computing",\n    "Economics", "Blue Collar Technology", "Nonprofit Leadership",\n    "Student Entrepreneurship", "Trade Industry AI", "Restaurant Technology"', '"Human-Centered Computing", "Product Design", "Economics",\n    "Blue Collar Technology", "Nonprofit Leadership",\n    "Student Entrepreneurship", "Trade Technology", "Restaurant Technology"'),
+            ('"description": "AI-powered trade assistant that generates complete, one-trip material lists with exact aisle numbers for Home Depot, Lowe\'s, and AutoZone. Describe the job, enter measurements — get every part, fastener, and fitting needed instantly."', '"description": "Job-site material planning tool for complete, one-trip lists with aisle guidance for Home Depot, Lowe\'s, and AutoZone. Describe the job or add a photo and get the parts, fasteners, fittings, and tools in one place."'),
+            ('"keywords": "AI trade assistant, material list generator, Home Depot AI, Lowe\'s AI, AutoZone AI, one-trip shopping, aisle numbers, plumbing, electrical, HVAC, contractor tool"', '"keywords": "trade material list, contractor material list, Home Depot aisle finder, Lowe\'s aisle finder, AutoZone parts list, one-trip shopping, plumbing materials, HVAC materials, contractor tool"'),
+            ('"AI-generated one-trip material lists"', '"One-trip material lists from job details and photos"'),
+            ('"description": "Student-founded AI company building technology for blue collar trades. Founded by Matthew John Sanchez, USC student and nonprofit leader from Long Island, New York."', '"description": "Student-founded product company building practical job-site tools for blue collar trades. Founded by Matthew John Sanchez."'),
+            ('"AI for trades", "Blue collar technology", "Restaurant technology",\n    "Home improvement AI", "Contractor tools", "Trade material lists"', '"Trade technology", "Blue collar technology", "Restaurant technology",\n    "Home improvement tools", "Contractor tools", "Trade material lists"'),
+            ('AI will use these dimensions to calculate exact quantities', 'Danny will use these dimensions to calculate exact quantities'),
+            ('AI will list every item needed so you make one trip and return nothing.', 'Danny will list every item needed so you make one trip and return nothing.'),
+            ('Material lists are AI-generated. Aisle numbers and prices are estimates —', 'Material lists are built from the job details you provide. Aisle numbers and prices are estimates —'),
+          ]
+
+          changed = 0
+          for old, new in replacements:
+              if old in s:
+                  s = s.replace(old, new, 1)
+                  changed += 1
+
+          if changed < 10:
+              raise SystemExit(f'Only {changed} expected homepage replacements matched; refusing partial rewrite')
+
+          p.write_text(s)
+          print(f'Applied {changed} homepage copy replacements')
+          PY
+
+      - name: Commit homepage and remove one-time workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm .github/workflows/refocus-homepage-copy.yml
+          git add index.html .github/workflows/refocus-homepage-copy.yml
+          git commit -m "Refocus Ask Danny homepage on trade work"
+          git push
