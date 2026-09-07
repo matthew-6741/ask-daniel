@@ -1,3 +1,43 @@
+<!-- Google Analytics (GA4) — consent-gated.
+     This used to load on every page view before the visitor had said anything,
+     which is the "tracking before consent" problem: under GDPR/ePrivacy an
+     analytics cookie needs opt-in first. Nothing from Google is requested now
+     until loadAnalytics() runs, and that only happens if the visitor accepts.
+     Replace G-XXXXXXXXXX with the Measurement ID from analytics.google.com
+     -> Admin -> Data Streams -> Web. Until you do, this stays inert either way. -->
+<script>
+  window.GA_MEASUREMENT_ID = 'G-XXXXXXXXXX';
+  window.COOKIE_CONSENT_KEY = 'diagnostech_cookie_consent_v1';
+
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){ dataLayer.push(arguments); }
+
+  // Default deny, before any tag could run. Google Consent Mode reads this.
+  gtag('consent', 'default', {
+    ad_storage: 'denied',
+    analytics_storage: 'denied',
+    ad_user_data: 'denied',
+    ad_personalization: 'denied',
+  });
+
+  window.loadAnalytics = function () {
+    if (window.__gaLoaded) return;
+    if (!window.GA_MEASUREMENT_ID || window.GA_MEASUREMENT_ID.indexOf('XXXX') !== -1) return;
+    window.__gaLoaded = true;
+    gtag('consent', 'update', { analytics_storage: 'granted' });
+    var sc = document.createElement('script');
+    sc.async = true;
+    sc.src = 'https://www.googletagmanager.com/gtag/js?id=' + window.GA_MEASUREMENT_ID;
+    document.head.appendChild(sc);
+    gtag('js', new Date());
+    gtag('config', window.GA_MEASUREMENT_ID, { anonymize_ip: true });
+  };
+
+  try {
+    if (localStorage.getItem(window.COOKIE_CONSENT_KEY) === 'accepted') window.loadAnalytics();
+  } catch (e) { /* storage blocked: stay opted out */ }
+</script>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -147,17 +187,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
-
-<!-- Google Analytics (GA4)
-     Replace G-XXXXXXXXXX with your Measurement ID from analytics.google.com
-     → Admin → Data Streams → Web. Until you do, this stays inert. -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){ dataLayer.push(arguments); }
-  gtag('js', new Date());
-  gtag('config', 'G-XXXXXXXXXX', { anonymize_ip: true });
-</script>
 
 <script type="application/ld+json">
 {
@@ -1223,6 +1252,49 @@ button .ico:only-child { margin-right: 0; }
 
 /* ── Photo attachment ── */
 .header-tools { display: flex; gap: 7px; }
+/* ── Cookie consent ──
+   Shown until the visitor chooses. Decline is a real choice with equal weight,
+   not a greyed-out link next to a big accept button — a banner that nudges is
+   not consent. */
+.cookie-banner {
+  position: fixed; left: 0; right: 0; bottom: 0;
+  /* Above the auth screen (9998) and the AI acknowledgement. A consent banner
+     rendered behind a full-screen overlay is not consent — it was invisible at
+     z-index 900 and nobody could have accepted or declined it. */
+  z-index: 10000;
+  display: none; gap: 14px; align-items: center; flex-wrap: wrap;
+  padding: 14px 18px; background: var(--surface);
+  border-top: 1px solid var(--border); box-shadow: 0 -2px 14px rgba(0,0,0,.10);
+}
+.cookie-banner.show { display: flex; }
+.cookie-text { flex: 1; min-width: 240px; font-size: 13px; color: var(--text); line-height: 1.5; }
+.cookie-text a { color: var(--accent); }
+.cookie-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.cookie-btn {
+  padding: 9px 16px; border-radius: 8px; font-size: 13px; font-weight: 500;
+  font-family: inherit; cursor: pointer; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text);
+}
+.cookie-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.cookie-btn:hover { opacity: .9; }
+@media (max-width: 520px) {
+  .cookie-actions { width: 100%; }
+  .cookie-btn { flex: 1; }
+}
+
+/* ── AI provenance label ──
+   Shown on the output itself, not only in a policy page. Someone who arrives at
+   a printed or screenshotted list should still be able to tell a machine wrote
+   it. */
+.ai-label {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 12px; margin-bottom: 14px;
+  background: var(--blue-bg); border: 1px solid var(--border);
+  border-radius: 8px; font-size: 11.5px; color: var(--text); line-height: 1.45;
+}
+.ai-label svg { flex-shrink: 0; color: var(--blue); }
+.ai-label a { color: var(--blue); }
+
 .photo-strip {
   display: flex; align-items: center; gap: 12px;
   background: var(--bg); border: 1px solid var(--border);
@@ -1442,7 +1514,7 @@ button .ico:only-child { margin-right: 0; }
 
     <label class="ack-check" for="ackBox">
       <input type="checkbox" id="ackBox" onchange="onAckChange()">
-      <span>I understand AI can make mistakes and I'll verify anything that matters. I agree to the <a href="/terms.html" target="_blank" rel="noopener" onclick="event.stopPropagation()">Terms of Use</a> and the data collection described in the <a href="/privacy.html" target="_blank" rel="noopener" onclick="event.stopPropagation()">Privacy &amp; AI Disclosure</a>.</span>
+      <span>I am 18 or older. I understand AI can make mistakes and I'll verify anything that matters. I agree to the <a href="/terms.html" target="_blank" rel="noopener" onclick="event.stopPropagation()">Terms of Use</a> and the data collection described in the <a href="/privacy.html" target="_blank" rel="noopener" onclick="event.stopPropagation()">Privacy &amp; AI Disclosure</a>.</span>
     </label>
 
     <button class="ack-btn" id="ackBtn" onclick="acceptAiAck()" disabled>Agree &amp; continue</button>
@@ -1663,6 +1735,14 @@ button .ico:only-child { margin-right: 0; }
   <!-- Results -->
   <div class="card results-card" id="resultsCard">
 
+    <!-- AI provenance, on the result itself. -->
+    <div class="ai-label">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+      <span>Generated by AI. No tradesperson has checked this list. Verify quantities,
+      specs and aisle numbers in store, and hire a licensed pro for gas, electrical or
+      structural work. <a href="/terms.html#ai" target="_blank" rel="noopener">How we use AI</a></span>
+    </div>
+
     <!-- Compare tabs (hidden in single-store mode) -->
     <div class="compare-tabs" id="compareTabs" style="display:none">
       <button class="compare-tab active" id="tabHD" onclick="switchCompareTab('hd')">
@@ -1860,7 +1940,10 @@ async function init() {
 
 // Versioned: bump this whenever the acknowledgement text or the Terms change,
 // so existing users re-consent rather than being held to wording they never saw.
-const AI_ACK_KEY = 'diagnostech_ai_ack_v2';
+// v3: the acknowledgement now includes an age statement. Bumping the key
+// makes existing users re-consent instead of being treated as having agreed
+// to wording that did not exist when they clicked.
+const AI_ACK_KEY = 'diagnostech_ai_ack_v3';
 
 function hasAcknowledgedAI() {
   try { return localStorage.getItem(AI_ACK_KEY) === 'yes'; } catch { return false; }
@@ -2284,6 +2367,27 @@ function resizePhoto(file) {
     reader.readAsDataURL(file);
   });
 }
+
+
+/* ── Cookie consent ────────────────────────────────────────────────────── */
+function setCookieConsent(choice) {
+  try { localStorage.setItem(window.COOKIE_CONSENT_KEY, choice); } catch (e) { /* ignore */ }
+  const b = document.getElementById('cookieBanner');
+  if (b) b.classList.remove('show');
+  if (choice === 'accepted' && typeof window.loadAnalytics === 'function') window.loadAnalytics();
+}
+
+function initCookieBanner() {
+  let choice = null;
+  try { choice = localStorage.getItem(window.COOKIE_CONSENT_KEY); } catch (e) { /* ignore */ }
+  // No stored choice means no consent yet — ask. A blocked localStorage also
+  // means no consent, and asking again is the safe direction to fail.
+  if (choice !== 'accepted' && choice !== 'declined') {
+    const b = document.getElementById('cookieBanner');
+    if (b) b.classList.add('show');
+  }
+}
+document.addEventListener('DOMContentLoaded', initCookieBanner);
 
 function clearPhoto() {
   jobPhoto = null;
@@ -3321,5 +3425,19 @@ function checkCode() {
 // ── Boot (last — everything it touches is declared above) ──
 init();
 </script>
+
+<!-- Cookie consent. Nothing is loaded from Google until this is accepted. -->
+<div class="cookie-banner" id="cookieBanner" role="dialog" aria-live="polite" aria-label="Cookie consent">
+  <div class="cookie-text">
+    Ask Danny uses local storage to remember your job history and settings, which is
+    needed for the site to work. With your permission we would also use Google Analytics
+    to see which trades people use most. You can say no and everything still works.
+    <a href="/cookies.html">Cookie Policy</a>
+  </div>
+  <div class="cookie-actions">
+    <button class="cookie-btn" onclick="setCookieConsent('declined')">Decline</button>
+    <button class="cookie-btn primary" onclick="setCookieConsent('accepted')">Accept analytics</button>
+  </div>
+</div>
 </body>
 </html>
