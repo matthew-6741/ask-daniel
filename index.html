@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ask Danny — AI Material List for Trades | Built by Matthew Sanchez, USC</title>
+<title>Ask Danny — One-Trip Material Lists for Trades | Built by Matthew Sanchez, USC</title>
 
 <!-- ── Primary SEO ── -->
 <meta name="description" content="Describe a repair job or photograph the problem. Ask Danny returns a one-trip material list with aisle numbers for Home Depot, Lowe's and AutoZone.">
@@ -15,8 +15,8 @@
 <!-- ── Open Graph (Facebook / LinkedIn) ── -->
 <meta property="og:type"        content="website">
 <meta property="og:url"         content="https://diagnostechai.com/">
-<meta property="og:title"       content="Ask Danny — AI Material List for Trades | Matthew Sanchez, USC">
-<meta property="og:description" content="AI-powered one-trip material lists with exact aisle numbers for Home Depot, Lowe's, and AutoZone. Built by Matthew John Sanchez — USC student, nonprofit founder, first-gen Ecuadorian-American from Long Island, NY.">
+<meta property="og:title"       content="Ask Danny — One-Trip Material Lists for Trades | Matthew Sanchez, USC">
+<meta property="og:description" content="Turn a repair job or photo into a one-trip material list with aisle guidance for Home Depot, Lowe's, and AutoZone.">
 <meta property="og:image"       content="https://diagnostechai.com/og-image.png">
 <meta property="og:site_name"   content="Ask Danny">
 <meta property="og:locale"      content="en_US">
@@ -24,7 +24,7 @@
 <!-- ── Twitter / X Card ── -->
 <meta name="twitter:card"        content="summary_large_image">
 <meta name="twitter:url"         content="https://diagnostechai.com/">
-<meta name="twitter:title"       content="Ask Danny — AI for Trades | Matthew Sanchez, USC">
+<meta name="twitter:title"       content="Ask Danny — One-Trip Material Lists for Trades">
 <meta name="twitter:description" content="Snap a photo of any trade problem. Get an exact, one-trip material list with aisle numbers for Home Depot, Lowe's, or AutoZone. Built by USC student Matthew Sanchez.">
 <meta name="twitter:image"       content="https://diagnostechai.com/og-image.png">
 <meta name="twitter:creator"     content="@MatthewSanchez">
@@ -36,9 +36,9 @@
   "@type": "Person",
   "name": "Matthew John Sanchez",
   "alternateName": ["Matthew Sanchez", "Matt Sanchez"],
-  "description": "First-generation Ecuadorian-American student entrepreneur from Bethpage, New York. USC Class of 2028 studying Economics with a focus on AI and human-centered computing. Founder of Sanchez Swim nonprofit, Fix4Me, and Ask Danny. Hispanic Scholarship Fund (HSF) scholar and youth education advocate.",
+  "description": "First-generation Ecuadorian-American student entrepreneur from Bethpage, New York. USC Class of 2028 studying Economics with a focus on human-centered technology. Founder of Sanchez Swim nonprofit, Fix4Me, and Ask Danny. Hispanic Scholarship Fund (HSF) scholar and youth education advocate.",
   "url": "https://diagnostechai.com",
-  "jobTitle": ["Student Entrepreneur", "Nonprofit Founder", "AI Developer"],
+  "jobTitle": ["Student Entrepreneur", "Nonprofit Founder", "Product Developer"],
   "affiliation": [
     {
       "@type": "CollegeOrUniversity",
@@ -66,9 +66,9 @@
     { "@type": "Country", "name": "Ecuador" }
   ],
   "knowsAbout": [
-    "Artificial Intelligence", "Machine Learning", "Human-Centered Computing",
-    "Economics", "Blue Collar Technology", "Nonprofit Leadership",
-    "Student Entrepreneurship", "Trade Industry AI", "Restaurant Technology"
+    "Human-Centered Computing", "Product Design", "Economics",
+    "Blue Collar Technology", "Nonprofit Leadership",
+    "Student Entrepreneurship", "Trade Technology", "Restaurant Technology"
   ],
   "award": "Hispanic Scholarship Fund (HSF) Scholar",
   "address": {
@@ -91,7 +91,7 @@
   "@type": "WebApplication",
   "name": "Ask Danny",
   "url": "https://diagnostechai.com",
-  "description": "AI-powered trade assistant that generates complete, one-trip material lists with exact aisle numbers for Home Depot, Lowe's, and AutoZone. Describe the job, enter measurements — get every part, fastener, and fitting needed instantly.",
+  "description": "Job-site material planning tool for complete, one-trip lists with aisle guidance for Home Depot, Lowe's, and AutoZone. Describe the job or add a photo and get the parts, fasteners, fittings, and tools in one place.",
   "applicationCategory": "UtilitiesApplication",
   "operatingSystem": "Any",
   "creator": {
@@ -103,9 +103,9 @@
     "price": "0",
     "priceCurrency": "USD"
   },
-  "keywords": "AI trade assistant, material list generator, Home Depot AI, Lowe's AI, AutoZone AI, one-trip shopping, aisle numbers, plumbing, electrical, HVAC, contractor tool",
+  "keywords": "trade material list, contractor material list, Home Depot aisle finder, Lowe's aisle finder, AutoZone parts list, one-trip shopping, plumbing materials, HVAC materials, contractor tool",
   "featureList": [
-    "AI-generated one-trip material lists",
+    "One-trip material lists from job details and photos",
     "Exact aisle numbers for Home Depot, Lowe's, AutoZone",
     "Geolocation-aware results",
     "Voice input via Web Speech API",
@@ -128,15 +128,15 @@
   "@type": "Organization",
   "name": "Ask Danny",
   "url": "https://diagnostechai.com",
-  "description": "Student-founded AI company building technology for blue collar trades. Founded by Matthew John Sanchez, USC student and nonprofit leader from Long Island, New York.",
+  "description": "Student-founded product company building practical job-site tools for blue collar trades. Founded by Matthew John Sanchez.",
   "founder": {
     "@type": "Person",
     "name": "Matthew John Sanchez"
   },
   "foundingDate": "2025",
   "knowsAbout": [
-    "AI for trades", "Blue collar technology", "Restaurant technology",
-    "Home improvement AI", "Contractor tools", "Trade material lists"
+    "Trade technology", "Blue collar technology", "Restaurant technology",
+    "Home improvement tools", "Contractor tools", "Trade material lists"
   ]
 }
 </script>
@@ -1591,7 +1591,7 @@ button .ico:only-child { margin-right: 0; }
           </div>
         </div>
         <div class="meas-hint">
-          AI will use these dimensions to calculate exact quantities — tiles, sheets of drywall, linear feet of pipe, gallons of paint, bags of concrete, etc. Leave blank if not applicable.
+          Danny will use these dimensions to calculate exact quantities — tiles, sheets of drywall, linear feet of pipe, gallons of paint, bags of concrete, etc. Leave blank if not applicable.
         </div>
       </div>
     </div>
@@ -1613,7 +1613,7 @@ button .ico:only-child { margin-right: 0; }
         <img id="photoPreview" alt="Photo of the job">
         <div class="photo-meta">
           <div class="photo-name" id="photoName">Photo attached</div>
-          <div class="photo-hint">The AI will read this along with your description.</div>
+          <div class="photo-hint">Danny will read this along with your description.</div>
         </div>
         <button class="photo-remove" onclick="clearPhoto()" title="Remove photo">&times;</button>
       </div>
@@ -1632,7 +1632,7 @@ button .ico:only-child { margin-right: 0; }
       <div class="tip-row" style="margin-top:14px">
         <div class="tip"><strong>Be specific</strong>Include pipe size, area dimensions, material type, or brand where it matters.</div>
         <div class="tip"><strong>Mention constraints</strong>Rental property, code requirements, tight space, matching existing — all help.</div>
-        <div class="tip"><strong>Goal</strong>AI will list every item needed so you make one trip and return nothing.</div>
+        <div class="tip"><strong>Goal</strong>Danny will list every item needed so you make one trip and return nothing.</div>
       </div>
 
       <div class="submit-row" style="margin-top:14px">
@@ -1721,13 +1721,15 @@ button .ico:only-child { margin-right: 0; }
 
   <footer class="site-footer">
     <p class="ai-note">
-      Material lists are AI-generated. Aisle numbers and prices are estimates —
+      Material lists are built from the job details you provide. Aisle numbers and prices are estimates —
       confirm in store. Not a substitute for a licensed professional.
     </p>
     <nav class="footer-links">
       <a href="/terms.html">Terms of Use</a>
       <span>·</span>
       <a href="/privacy.html">Privacy &amp; AI disclosure</a>
+      <span>·</span>
+      <a href="/cookies.html">Cookies Policy</a>
       <span>·</span>
       <a href="/login.html">Sign in</a>
       <span>·</span>
