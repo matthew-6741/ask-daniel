@@ -1837,8 +1837,15 @@ button .ico:only-child { margin-right: 0; }
     <div class="updates-sub">
       New trades, more verified aisles, and what changed. Occasional, never sold, unsubscribe in one click.
     </div>
-    <form class="updates-row" id="updatesForm" onsubmit="return submitUpdates(event)">
-      <input type="email" id="updatesEmail" placeholder="you@example.com"
+    <!-- data-netlify makes Netlify capture submissions itself, with no
+         database and no credentials. That is the fallback while Blobs is
+         unconfigured; the honeypot is Netlify's own spam trap. -->
+    <form class="updates-row" id="updatesForm" name="updates" method="POST"
+          data-netlify="true" netlify-honeypot="bot-field"
+          onsubmit="return submitUpdates(event)">
+      <input type="hidden" name="form-name" value="updates">
+      <p hidden><label>Leave this empty: <input name="bot-field"></label></p>
+      <input type="email" id="updatesEmail" name="email" placeholder="you@example.com"
              autocomplete="email" maxlength="254" required>
       <button type="submit" id="updatesBtn">Keep me posted</button>
     </form>
@@ -2444,6 +2451,24 @@ document.addEventListener('DOMContentLoaded', initCookieBanner);
 /* ── Update list ───────────────────────────────────────────────────────────
    The consent box is required and starts unticked. The server checks it too —
    this is the courtesy check, not the enforcement. */
+// Netlify Forms takes a urlencoded POST to any path on the site, as long as
+// form-name matches a form present in the deployed HTML.
+async function postToNetlifyForms(email) {
+  try {
+    const res = await fetch('/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        'form-name': 'updates',
+        email,
+        consent: 'I want occasional emails about Ask Danny updates. I can unsubscribe any time.',
+        source: 'site-footer',
+      }).toString(),
+    });
+    return res.ok;
+  } catch { return false; }
+}
+
 async function submitUpdates(e) {
   e.preventDefault();
   const email   = document.getElementById('updatesEmail').value.trim();
@@ -2465,6 +2490,18 @@ async function submitUpdates(e) {
       body: JSON.stringify({ email, consent: true, source: 'site-footer' }),
     });
     const data = await res.json().catch(() => ({}));
+
+    // 503 means our own store is unreachable. Rather than lose the signup,
+    // hand it to Netlify Forms, which needs no database and no credentials.
+    // Once Blobs is configured the API succeeds and this never runs, so the
+    // two stores cannot both collect the same address.
+    if (res.status === 503) {
+      const ok = await postToNetlifyForms(email);
+      return show(ok
+        ? 'You are on the list. We will only email about Ask Danny.'
+        : 'Could not add that address. Try again shortly.', ok ? 'ok' : 'bad'), false;
+    }
+
     if (!res.ok || data.error) {
       show(data.error || 'Could not add that address. Try again shortly.', 'bad');
     } else {

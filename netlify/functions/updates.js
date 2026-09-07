@@ -210,11 +210,7 @@ exports.handler = async (event) => {
     if ((event.queryStringParameters || {}).diag) {
       const probe = { at: new Date().toISOString() };
       const steps = {};
-      // Names only, never values. Which of these the runtime provides decides
-      // whether Blobs can self-configure or needs an explicit token.
-      steps.env = Object.keys(process.env)
-        .filter(k => /^(NETLIFY|SITE_ID|BLOB|DEPLOY|URL$|CONTEXT$)/i.test(k))
-        .sort().join(', ') || '(none)';
+
       try {
         const t = store();
         steps.getStore = 'ok';
