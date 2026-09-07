@@ -399,6 +399,150 @@ const TINY_JPEG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z
   }
 
 
+
+  // ── Update list ──
+  {
+    // An in-memory stand-in for Netlify Blobs so these run with no network.
+    // Keyed by store NAME — the first version returned one shared map, so the
+    // rate limiter's writes landed in the subscriber list and every count was
+    // wrong. Separate stores must stay separate.
+    const stores = new Map();
+    const memFor = (name) => {
+      if (!stores.has(name)) stores.set(name, new Map());
+      return stores.get(name);
+    };
+    const fakeBlobs = { getStore: (opts) => {
+      const mem = memFor(typeof opts === 'string' ? opts : opts.name);
+      return {
+        get: async (k) => mem.has(k) ? JSON.parse(mem.get(k)) : null,
+        setJSON: async (k, v) => { mem.set(k, JSON.stringify(v)); },
+        list: async () => ({ blobs: [...mem.keys()].map(key => ({ key })) }),
+      };
+    } };
+    const mem = memFor('subscribers');
+    const req = (name) => name === '@netlify/blobs' ? fakeBlobs : depRequire(name);
+    const loadWithBlobs = (file) => {
+      const src = fs.readFileSync(path.join(SRC, file), 'utf8');
+      const m = { exports: {} };
+      new Function('module','exports','process','fetch','require','__dirname',src)(
+        m, m.exports, process, async () => { throw new Error('no network'); }, req, SRC);
+      return m.exports;
+    };
+    const ev = (over) => ({ httpMethod: 'POST', path: '/api/subscribe',
+      headers: { origin: 'https://diagnostechai.com', 'x-forwarded-for': '10.1.1.1' },
+      body: JSON.stringify({ email: 'sam@example.com', consent: true, source: 'test' }), ...over });
+
+    const { handler } = loadWithBlobs('updates.js');
+
+    // Consent is the whole legal basis for this list existing.
+    const noConsent = await handler(ev({ body: JSON.stringify({ email: 'sam@example.com' }) }));
+    ok('list: refuses to add without consent', noConsent.statusCode === 400);
+    ok('list: nothing stored when consent is missing', mem.size === 0);
+
+    for (const bad of ['notanemail', 'a@b', 'x@y.z@w.com', '', 'a'.repeat(250) + '@x.com']) {
+      const r = await handler(ev({ body: JSON.stringify({ email: bad, consent: true }) }));
+      ok(`list: rejects invalid address ${JSON.stringify(bad).slice(0, 22)}`, r.statusCode === 400);
+    }
+
+    const good = await handler(ev({}));
+    ok('list: adds a consented address', good.statusCode === 200 && JSON.parse(good.body).ok === true);
+    ok('list: exactly one record stored', mem.size === 1);
+
+    const stored = JSON.parse([...mem.values()][0]);
+    ok('list: what they agreed to is stored with the address', /unsubscribe any time/i.test(stored.consentText));
+    ok('list: consent is timestamped', !!stored.consentedAt);
+    ok('list: an unsubscribe token exists from the start', (stored.unsubToken || '').length > 20);
+    // The key turns up in logs and listings; the address must not.
+    ok('list: the blob key is not the email address',
+       ![...mem.keys()][0].includes('sam') && ![...mem.keys()][0].includes('@'));
+
+    // Re-subscribing must not create a second record or a second token.
+    await handler(ev({}));
+    ok('list: subscribing twice does not duplicate', mem.size === 1);
+
+    // Telling someone their address is already on the list turns this into a
+    // way to test whether a given person uses Ask Danny.
+    ok('list: the reply is identical for a new and an existing address',
+       JSON.parse(good.body).message === JSON.parse((await handler(ev({}))).body).message);
+
+    // Unsubscribe: one click, no login, GET so it works from a mail client.
+    const un = await handler({ httpMethod: 'GET', path: '/api/unsubscribe',
+      headers: {}, queryStringParameters: { t: stored.unsubToken } });
+    ok('list: unsubscribe works from a plain link', un.statusCode === 200);
+    ok('list: the record is marked unsubscribed',
+       JSON.parse([...mem.values()][0]).status === 'unsubscribed');
+
+    const wrong = await handler({ httpMethod: 'GET', path: '/api/unsubscribe',
+      headers: {}, queryStringParameters: { t: 'not-a-real-token' } });
+    ok('list: a bad token gets the same page, not a hint', wrong.statusCode === 200);
+
+    // The list itself must never be readable without the admin token.
+    delete process.env.ADMIN_TOKEN;
+    const openExport = await handler({ httpMethod: 'GET', path: '/api/subscribers', headers: {} });
+    ok('list: export is refused when no admin token is configured', openExport.statusCode === 404);
+
+    process.env.ADMIN_TOKEN = 'test-admin-token-value';
+    const guessed = await handler({ httpMethod: 'GET', path: '/api/subscribers',
+      headers: { 'x-admin-token': 'wrong-token-same-len!!' } });
+    ok('list: export is refused with a wrong token', guessed.statusCode === 404);
+
+    const exported = await handler({ httpMethod: 'GET', path: '/api/subscribers',
+      headers: { 'x-admin-token': 'test-admin-token-value' } });
+    ok('list: export works with the admin token', exported.statusCode === 200);
+    ok('list: export returns the address', /sam@example\.com/.test(exported.body));
+    delete process.env.ADMIN_TOKEN;
+  }
+
+  {
+    // Broadcast must be impossible to fire by accident.
+    const mem = new Map();
+    mem.set('k1', JSON.stringify({ email: 'sam@example.com', status: 'subscribed', unsubToken: 'tok1' }));
+    mem.set('k2', JSON.stringify({ email: 'gone@example.com', status: 'unsubscribed', unsubToken: 'tok2' }));
+    const fakeBlobs = { getStore: () => ({
+      get: async (k) => mem.has(k) ? JSON.parse(mem.get(k)) : null,
+      setJSON: async () => {},
+      list: async () => ({ blobs: [...mem.keys()].map(key => ({ key })) }),
+    }) };
+    const req = (name) => name === '@netlify/blobs' ? fakeBlobs : depRequire(name);
+    let sends = 0;
+    const src = fs.readFileSync(path.join(SRC, 'broadcast.js'), 'utf8');
+    const m = { exports: {} };
+    new Function('module','exports','process','fetch','require','__dirname',src)(
+      m, m.exports, process,
+      async () => { sends++; return { ok: true, json: async () => ({ id: 'x' }) }; }, req, SRC);
+    const { handler } = m.exports;
+    const post = (body, tok) => ({ httpMethod: 'POST', headers: tok ? { 'x-admin-token': tok } : {},
+      body: JSON.stringify(body) });
+
+    delete process.env.ADMIN_TOKEN;
+    ok('broadcast: refused with no admin token configured',
+       (await handler(post({ subject: 'a', body: 'b' }))).statusCode === 404);
+
+    process.env.ADMIN_TOKEN = 'test-admin-token-value';
+    ok('broadcast: refused with a wrong token',
+       (await handler(post({ subject: 'a', body: 'b' }, 'wrong-token-same-len!!'))).statusCode === 404);
+
+    // The dangerous default. Omitting the flag must not mail everyone.
+    const dry = await handler(post({ subject: 'Hello', body: 'Update.' }, 'test-admin-token-value'));
+    const dd = JSON.parse(dry.body);
+    ok('broadcast: defaults to a dry run when dryRun is omitted', dd.dryRun === true && sends === 0);
+    ok('broadcast: counts only active subscribers', dd.wouldSend === 1);
+
+    // A real send still needs a provider, and says so rather than silently doing nothing.
+    delete process.env.RESEND_API_KEY;
+    const unconf = await handler(post({ subject: 'Hello', body: 'Update.', dryRun: false }, 'test-admin-token-value'));
+    ok('broadcast: a real send without a provider fails loudly',
+       unconf.statusCode === 503 && sends === 0, unconf.body.slice(0, 80));
+
+    process.env.RESEND_API_KEY = 're_test';
+    process.env.MAIL_FROM = 'Ask Danny <updates@diagnostechai.com>';
+    const real = await handler(post({ subject: 'Hello', body: 'Update.', dryRun: false }, 'test-admin-token-value'));
+    ok('broadcast: sends to the one active subscriber', JSON.parse(real.body).sent === 1 && sends === 1);
+    ok('broadcast: never mails someone who unsubscribed', sends === 1);
+    delete process.env.ADMIN_TOKEN; delete process.env.RESEND_API_KEY; delete process.env.MAIL_FROM;
+  }
+
+
   console.log('─────────────────────────────────────────────');
   console.log(`  ${pass} passed, ${fail} failed`);
   if (failures.length) {

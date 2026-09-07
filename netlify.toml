@@ -51,3 +51,23 @@
   from = "/api/council"
   to = "/.netlify/functions/ai-council"
   status = 200
+
+[[redirects]]
+  from = "/api/subscribe"
+  to = "/.netlify/functions/updates"
+  status = 200
+
+[[redirects]]
+  from = "/api/unsubscribe"
+  to = "/.netlify/functions/updates"
+  status = 200
+
+[[redirects]]
+  from = "/api/subscribers"
+  to = "/.netlify/functions/updates"
+  status = 200
+
+[[redirects]]
+  from = "/api/broadcast"
+  to = "/.netlify/functions/broadcast"
+  status = 200
