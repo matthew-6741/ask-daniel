@@ -24,16 +24,36 @@
     # Force HTTPS for 1 year, include subdomains
     Strict-Transport-Security = "max-age=31536000; includeSubDomains"
 
-    # Block XSS in older browsers
-    X-XSS-Protection = "1; mode=block"
+    # OWASP now says to turn this off, not on: the legacy XSS auditor could be
+    # abused to introduce vulnerabilities into otherwise safe pages, and every
+    # browser that had it has removed it. CSP is the real protection.
+    X-XSS-Protection = "0"
+
+    # Isolate the browsing context — the mitigation for Spectre-class and
+    # XS-Leak attacks. "allow-popups" rather than plain "same-origin" because
+    # Firebase's Google sign-in opens a popup that must postMessage back to its
+    # opener; plain same-origin severs that and the sign-in silently hangs.
+    # Firebase is not configured yet, so this would have broken later, in a
+    # place nobody would have connected to a header change.
+    Cross-Origin-Opener-Policy = "same-origin-allow-popups"
+
+    # Our own responses may only be loaded by our own site.
+    Cross-Origin-Resource-Policy = "same-site"
+
+    # Deliberately NOT setting Cross-Origin-Embedder-Policy: require-corp.
+    # It blocks every cross-origin resource that does not opt in, which would
+    # break Google Fonts and the Firebase SDK from gstatic. It is the right
+    # header for a site that self-hosts everything, which this one does not.
 
     # Permissions policy — disable features the app doesn't use
-    Permissions-Policy = "camera=(), payment=(), usb=(), magnetometer=(), accelerometer=()"
+    # microphone and geolocation are "self", not blocked: voice input and the
+    # city lookup are real features. Everything else is denied outright.
+    Permissions-Policy = "camera=(), payment=(), usb=(), magnetometer=(), accelerometer=(), microphone=(self), geolocation=(self), interest-cohort=()"
 
     # Content Security Policy (single line — newlines are invalid in header values)
     # Scripts: self + Firebase CDN + Google APIs (auth). Styles/fonts: Google Fonts.
     # Connect: self (proxy) + Firebase + Nominatim geocoding.
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://apis.google.com https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://identitytoolkit.googleapis.com https://nominatim.openstreetmap.org https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com; img-src 'self' data: https:; frame-src https://*.firebaseapp.com; object-src 'none'; base-uri 'self'; form-action 'self'"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://apis.google.com https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://identitytoolkit.googleapis.com https://nominatim.openstreetmap.org https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com; img-src 'self' data: https:; frame-src https://*.firebaseapp.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 
 [[redirects]]
   from = "/api/ai"
