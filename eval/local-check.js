@@ -543,6 +543,35 @@ const TINY_JPEG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z
   }
 
 
+
+  // ── CSP script hashes ──
+  {
+    // script-src has no 'unsafe-inline'; the two inline blocks are allowed by
+    // SHA-256 hash. Editing index.html without updating netlify.toml blocks
+    // ALL JavaScript and the site is dead on arrival — a silent, total
+    // failure. This test is the only thing standing between an ordinary edit
+    // and that, so it must fail loudly rather than warn.
+    const crypto = require('crypto');
+    const root = path.join(__dirname, '..');
+    const htmlSrc = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+    const toml = fs.readFileSync(path.join(root, 'netlify.toml'), 'utf8');
+
+    const blocks = [...htmlSrc.matchAll(/<script(?![^>]*\bsrc=)(?![^>]*ld\+json)[^>]*>([\s\S]*?)<\/script>/g)]
+      .map(m => m[1]);
+    const want = blocks.map(b => "'sha256-" + crypto.createHash('sha256').update(b).digest('base64') + "'");
+
+    const directive = (toml.match(/Content-Security-Policy = "([^"]*)"/) || [])[1] || '';
+    const scriptSrc = (directive.match(/script-src ([^;]*)/) || [])[1] || '';
+
+    ok('csp: script-src does not allow unsafe-inline', !/'unsafe-inline'/.test(scriptSrc), scriptSrc.slice(0, 80));
+    ok('csp: every inline script block is hashed in netlify.toml',
+       want.length > 0 && want.every(h => scriptSrc.includes(h)),
+       want.filter(h => !scriptSrc.includes(h)).join(' ') + '  <- run: node eval/csp-hashes.js');
+    ok('csp: no stale hashes left behind',
+       (scriptSrc.match(/'sha256-[^']+'/g) || []).every(h => want.includes(h)));
+  }
+
+
   console.log('─────────────────────────────────────────────');
   console.log(`  ${pass} passed, ${fail} failed`);
   if (failures.length) {
